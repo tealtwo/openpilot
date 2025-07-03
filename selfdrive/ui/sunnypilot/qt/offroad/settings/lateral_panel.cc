@@ -89,8 +89,16 @@ LateralPanel::LateralPanel(SettingsWindowSP *parent) : QFrame(parent) {
     nnlcToggle->updateToggle();
   });
 
+  // Lateral Control Method For VW PQ (PLA/HCA)
+  pqLateralToggle = new ParamControl (
+    "pqLatControlToggle",
+    tr("Use HCA (7) or PLA for Lateral Control"),
+    tr("Selects the method of Lateral Control between HCA (Stock LKAS Messages) and PLA (Park Lane Assist) on Volkswagen PQ Platform Vehicles"),
+    "");
+  list->addItem(pqLateralToggle);
+
   toggleOffroadOnly = {
-    madsToggle, nnlcToggle,
+    madsToggle, nnlcToggle, pqLateralToggle,
   };
   QObject::connect(uiState(), &UIState::offroadTransition, this, &LateralPanel::updateToggles);
 
