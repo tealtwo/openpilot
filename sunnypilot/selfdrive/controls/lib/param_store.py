@@ -18,7 +18,7 @@ class ParamStore:
 
   def __init__(self, CP: structs.CarParams):
     universal_params: list[str] = []
-    brand_params: list[str] = []
+    brand_params: list[str] = ["pqLatControlToggle"]
 
     self.keys = universal_params + brand_params
     self.values = {}
