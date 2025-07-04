@@ -92,9 +92,10 @@ LateralPanel::LateralPanel(SettingsWindowSP *parent) : QFrame(parent) {
   // Lateral Control Method For VW PQ (PLA/HCA)
   pqLateralToggle = new ParamControl (
     "pqLatControlToggle",
-    tr("Use HCA (7) or PLA for Lateral Control"),
-    tr("Selects the method of Lateral Control between HCA (Stock LKAS Messages) and PLA (Park Lane Assist) on Volkswagen PQ Platform Vehicles"),
+    tr("Enable PLA Angle Lateral Control"),
+    tr("Selects the method of Lateral Control between HCA (Torque Based Stock LKAS Messages) and PLA (Angle Based Park Lane Assist) on Volkswagen PQ Platform Vehicles. Leave disabled to use HCA."),
     "");
+  pqLateralToggle->setConfirmation(true, false);
   list->addItem(pqLateralToggle);
 
   toggleOffroadOnly = {
