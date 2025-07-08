@@ -8,6 +8,7 @@ See the LICENSE.md file in the root directory for more details.
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
+from openpilot.sunnypilot.models.helpers import get_active_bundle
 
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 
@@ -15,6 +16,11 @@ DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimen
 class LongitudinalPlannerSP:
   def __init__(self, CP: structs.CarParams, mpc):
     self.dec = DynamicExperimentalController(CP, mpc)
+    self.generation = model_bundle.generation if model_bundle is not None else None
+
+  @property
+  def mlsim(self) -> bool:
+    return bool(self.generation is not None and self.generation >= 11)
 
   def get_mpc_mode(self) -> str | None:
     if not self.dec.active():
