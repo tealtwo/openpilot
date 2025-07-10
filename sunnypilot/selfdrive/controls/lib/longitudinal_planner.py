@@ -16,6 +16,7 @@ DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimen
 class LongitudinalPlannerSP:
   def __init__(self, CP: structs.CarParams, mpc):
     self.dec = DynamicExperimentalController(CP, mpc)
+    model_bundle = get_active_bundle()
     self.generation = model_bundle.generation if model_bundle is not None else None
 
   @property
