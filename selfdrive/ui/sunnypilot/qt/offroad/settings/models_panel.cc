@@ -42,6 +42,14 @@ ModelsPanel::ModelsPanel(QWidget *parent) : QWidget(parent) {
   connect(uiStateSP(), &UIStateSP::uiUpdate, this, &ModelsPanel::updateLabels);
   list->addItem(currentModelLblBtn);
 
+  // Dynamic Modeld Outputs toggle
+  dynamicModeldOutputs = new ParamControlSP("DynamicModeldOutputs", tr("Allow Dynamic Model Outputs"),
+                                            tr("Enable this to allow potentially smoother Gas and Brake controls on all models produced "
+                                               "after September, 2024."),
+                                               "../assets/offroad/icon_shell.png");
+  dynamicModeldOutputs->showDescription();
+  list->addItem(dynamicModeldOutputs);
+
   // LiveDelay toggle
   list->addItem(new ParamControlSP("LagdToggle",
                                    tr("Live Learning Steer Delay"),

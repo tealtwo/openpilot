@@ -60,6 +60,7 @@ private:
   bool is_onroad = false;
 
   ButtonControlSP *currentModelLblBtn;
+  ParamControlSP *dynamicModeldOutputs;
   Params params;
 
 };
