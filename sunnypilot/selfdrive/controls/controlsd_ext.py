@@ -47,10 +47,6 @@ class ControlsExt:
   def state_control_ext(self, sm: messaging.SubMaster) -> custom.CarControlSP:
     CC_SP = custom.CarControlSP.new_message()
 
-    if sm.updated['radarState']:
-      CC_SP.leadOne = sm['radarState'].leadOne
-      CC_SP.leadTwo = sm['radarState'].leadTwo
-
     # MADS state
     CC_SP.mads = sm['selfdriveStateSP'].mads
 
