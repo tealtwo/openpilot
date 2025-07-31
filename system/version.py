@@ -11,9 +11,10 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.git import get_commit, get_origin, get_branch, get_short_branch, get_commit_date
 
 RELEASE_SP_BRANCHES = ['release-c3']
-TESTED_SP_BRANCHES = ['staging-c3', 'staging-c3-new']
+RELEASE_TEAL_BRANCHES = ['sp_master_0606', 'sp_master_0606_pla-hca']
+TESTED_SP_BRANCHES = ['staging-c3', 'staging-c3-new', 'sp_master_0606_pla-hca', 'sp_master_0606',]
 MASTER_SP_BRANCHES = ['master', 'master-new']
-RELEASE_BRANCHES = ['release3-staging', 'release3', 'nightly'] + RELEASE_SP_BRANCHES
+RELEASE_BRANCHES = ['release3-staging', 'release3', 'nightly'] + RELEASE_SP_BRANCHES + RELEASE_TEAL_BRANCHES
 TESTED_BRANCHES = RELEASE_BRANCHES + ['devel', 'devel-staging', 'nightly-dev'] + TESTED_SP_BRANCHES
 
 BUILD_METADATA_FILENAME = "build.json"
@@ -82,6 +83,10 @@ class OpenpilotMetadata:
     # note to fork maintainers, this is used for release metrics. please do not
     # touch this to get rid of the orange startup alert. there's better ways to do that
     return self.git_normalized_origin == "github.com/commaai/openpilot"
+
+  @property
+  def teal_remote(self) -> bool:
+    return self.git_normalized_origin == "github.com/tealtwo/openpilot"
 
   @property
   def git_normalized_origin(self) -> str:
