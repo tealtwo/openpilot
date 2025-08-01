@@ -11,10 +11,10 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.git import get_commit, get_origin, get_branch, get_short_branch, get_commit_date
 
 RELEASE_SP_BRANCHES = ['release-c3']
-RELEASE_TEAL_BRANCHES = ['sp_master_0606', 'sp_master_0606_pla-hca']
-TESTED_SP_BRANCHES = ['staging-c3', 'staging-c3-new', 'sp_master_0606_pla-hca', 'sp_master_0606',]
+MASTER_TEAL_BRANCHES = ['sp_master_0606', 'sp_master_0606_pla-hca', 'master']
+TESTED_SP_BRANCHES = ['staging-c3', 'staging-c3-new']
 MASTER_SP_BRANCHES = ['master', 'master-new']
-RELEASE_BRANCHES = ['release3-staging', 'release3', 'nightly'] + RELEASE_SP_BRANCHES + RELEASE_TEAL_BRANCHES
+RELEASE_BRANCHES = ['release3-staging', 'release3', 'nightly'] + RELEASE_SP_BRANCHES
 TESTED_BRANCHES = RELEASE_BRANCHES + ['devel', 'devel-staging', 'nightly-dev'] + TESTED_SP_BRANCHES
 
 BUILD_METADATA_FILENAME = "build.json"
