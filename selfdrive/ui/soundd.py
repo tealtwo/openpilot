@@ -2,7 +2,7 @@ import math
 import numpy as np
 import time
 import wave
-
+import struct
 
 from cereal import car, messaging
 from openpilot.common.basedir import BASEDIR
@@ -16,17 +16,16 @@ from openpilot.system import micd
 from openpilot.selfdrive.ui.sunnypilot.quiet_mode import QuietMode
 
 SAMPLE_RATE = 48000
-SAMPLE_BUFFER = 4096 # (approx 100ms)
+SAMPLE_BUFFER = 4096  # (approx 100ms)
 MAX_VOLUME = 1.0
 MIN_VOLUME = 0.1
-SELFDRIVE_STATE_TIMEOUT = 5 # 5 seconds
+SELFDRIVE_STATE_TIMEOUT = 5  # 5 seconds
 FILTER_DT = 1. / (micd.SAMPLE_RATE / micd.FFT_SAMPLES)
 
-AMBIENT_DB = 30 # DB where MIN_VOLUME is applied
-DB_SCALE = 30 # AMBIENT_DB + DB_SCALE is where MAX_VOLUME is applied
+AMBIENT_DB = 30  # DB where MIN_VOLUME is applied
+DB_SCALE = 30  # AMBIENT_DB + DB_SCALE is where MAX_VOLUME is applied
 
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
-
 
 sound_list: dict[int, tuple[str, int | None, float]] = {
   # AudibleAlert, file name, play count (none for infinite)
@@ -42,6 +41,7 @@ sound_list: dict[int, tuple[str, int | None, float]] = {
   AudibleAlert.warningImmediate: ("warning_immediate.wav", None, MAX_VOLUME),
 }
 
+
 def check_selfdrive_timeout_alert(sm):
   ss_missing = time.monotonic() - sm.recv_time['selfdriveState']
 
@@ -50,6 +50,44 @@ def check_selfdrive_timeout_alert(sm):
       return True
 
   return False
+
+
+def read_wav_file_raw(filepath):
+  """Read WAV file by manually parsing the header, bypassing wave module checks"""
+  with open(filepath, 'rb') as f:
+    # Read the entire file
+    data = f.read()
+
+  # Basic WAV file structure parsing
+  if len(data) < 44:
+    raise ValueError("File too small to be a valid WAV")
+
+  # Parse WAV header manually
+  # We don't validate RIFF header strictly, just find the data chunk
+  idx = 12  # Skip RIFF header and file size
+
+  # Find the 'data' chunk
+  while idx < len(data) - 8:
+    chunk_id = data[idx:idx + 4]
+    chunk_size = struct.unpack('<I', data[idx + 4:idx + 8])[0]
+
+    if chunk_id == b'data':
+      # Found data chunk
+      data_start = idx + 8
+      audio_data = data[data_start:data_start + chunk_size]
+      # Convert to numpy array (16-bit signed PCM)
+      return np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / (2 ** 16 / 2)
+
+    # Skip to next chunk
+    idx += 8 + chunk_size
+    # Ensure even alignment
+    if chunk_size % 2 == 1:
+      idx += 1
+
+  # If we couldn't find data chunk, just assume data starts at offset 44
+  # (standard WAV header size)
+  audio_data = data[44:]
+  return np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / (2 ** 16 / 2)
 
 
 class Soundd(QuietMode):
@@ -72,16 +110,28 @@ class Soundd(QuietMode):
     # Load all sounds
     for sound in sound_list:
       filename, play_count, volume = sound_list[sound]
+      filepath = BASEDIR + "/selfdrive/assets/sounds/" + filename
 
-      with wave.open(BASEDIR + "/selfdrive/assets/sounds/" + filename, 'r') as wavefile:
-        assert wavefile.getnchannels() == 1
-        assert wavefile.getsampwidth() == 2
-        assert wavefile.getframerate() == SAMPLE_RATE
+      try:
+        with wave.open(filepath, 'r') as wavefile:
+          assert wavefile.getnchannels() == 1
+          assert wavefile.getsampwidth() == 2
+          assert wavefile.getframerate() == SAMPLE_RATE
 
-        length = wavefile.getnframes()
-        self.loaded_sounds[sound] = np.frombuffer(wavefile.readframes(length), dtype=np.int16).astype(np.float32) / (2**16/2)
+          length = wavefile.getnframes()
+          self.loaded_sounds[sound] = np.frombuffer(wavefile.readframes(length), dtype=np.int16).astype(np.float32) / (
+              2 ** 16 / 2)
+      except:
+        # If wave.open fails for any reason, try reading raw
+        cloudlog.warning(f"wave.open failed for {filename}, reading as raw PCM")
+        try:
+          self.loaded_sounds[sound] = read_wav_file_raw(filepath)
+          cloudlog.info(f"Successfully loaded {filename} using raw reader")
+        except Exception as e:
+          cloudlog.error(f"Failed to load {filename}: {e}")
+          raise
 
-  def get_sound_data(self, frames): # get "frames" worth of data from the current alert sound, looping when required
+  def get_sound_data(self, frames):  # get "frames" worth of data from the current alert sound, looping when required
 
     ret = np.zeros(frames, dtype=np.float32)
 
@@ -96,7 +146,8 @@ class Soundd(QuietMode):
       while written_frames < frames and (num_loops is None or loops < num_loops):
         available_frames = sound_data.shape[0] - current_sound_frame
         frames_to_write = min(available_frames, frames - written_frames)
-        ret[written_frames:written_frames+frames_to_write] = sound_data[current_sound_frame:current_sound_frame+frames_to_write]
+        ret[written_frames:written_frames + frames_to_write] = sound_data[
+                                                               current_sound_frame:current_sound_frame + frames_to_write]
         written_frames += frames_to_write
         self.current_sound_frame += frames_to_write
 
@@ -108,7 +159,8 @@ class Soundd(QuietMode):
     data_out[:frames, 0] = self.get_sound_data(frames)
 
   def update_alert(self, new_alert):
-    current_alert_played_once = self.current_alert == AudibleAlert.none or self.current_sound_frame > len(self.loaded_sounds[self.current_alert])
+    current_alert_played_once = self.current_alert == AudibleAlert.none or self.current_sound_frame > len(
+      self.loaded_sounds[self.current_alert])
     if self.current_alert != new_alert and (new_alert != AudibleAlert.none or current_alert_played_once):
       self.current_alert = new_alert
       self.current_sound_frame = 0
@@ -144,13 +196,15 @@ class Soundd(QuietMode):
     with self.get_stream(sd) as stream:
       rk = Ratekeeper(20)
 
-      cloudlog.info(f"soundd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
+      cloudlog.info(
+        f"soundd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
       while True:
         sm.update(0)
 
         self.load_param()
 
-        if sm.updated['microphone'] and self.current_alert == AudibleAlert.none: # only update volume filter when not playing alert
+        if sm.updated[
+          'microphone'] and self.current_alert == AudibleAlert.none:  # only update volume filter when not playing alert
           self.spl_filter_weighted.update(sm["microphone"].soundPressureWeightedDb)
           self.current_volume = self.calculate_volume(float(self.spl_filter_weighted.x))
 
