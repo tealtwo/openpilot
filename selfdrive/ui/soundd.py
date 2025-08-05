@@ -80,6 +80,10 @@ class Soundd(QuietMode):
         # Read the rest as raw audio data
         raw_data = f.read()
 
+      # Make sure data length is even (multiple of 2 for int16)
+      if len(raw_data) % 2 != 0:
+        raw_data = raw_data[:-1]  # Drop last byte if odd
+
       # Convert to numpy array (assuming 16-bit signed PCM, mono)
       self.loaded_sounds[sound] = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / (2 ** 16 / 2)
 
@@ -155,7 +159,8 @@ class Soundd(QuietMode):
 
         self.load_param()
 
-        if sm.updated['microphone'] and self.current_alert == AudibleAlert.none:  # only update volume filter when not playing alert
+        if sm.updated[
+          'microphone'] and self.current_alert == AudibleAlert.none:  # only update volume filter when not playing alert
           self.spl_filter_weighted.update(sm["microphone"].soundPressureWeightedDb)
           self.current_volume = self.calculate_volume(float(self.spl_filter_weighted.x))
 
