@@ -92,6 +92,9 @@ class Parser:
       final_shape = tuple([raw.shape[0],] + list(out_shape))
     outs[name] = pred_mu_final.reshape(final_shape)
     outs[name + '_stds'] = pred_std_final.reshape(final_shape)
+    
+  def _parse_plan_mhp(self, outs):
+    self.parse_mdn('plan', outs, in_N=SplitModelConstants.PLAN_MHP_N, out_N=SplitModelConstants.PLAN_MHP_SELECTION, out_shape=(SplitModelConstants.IDX_N,SplitModelConstants.PLAN_WIDTH))
 
   def parse_dynamic_outputs(self, outs: dict[str, np.ndarray]) -> None:
     if 'lead' in outs:
