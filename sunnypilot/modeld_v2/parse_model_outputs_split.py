@@ -94,29 +94,22 @@ class Parser:
     outs[name + '_stds'] = pred_std_final.reshape(final_shape)
 
   def parse_dynamic_outputs(self, outs: dict[str, np.ndarray]) -> None:
-    if self._params.get_bool("DynamicModeldOutputs") or (self.generation >= 12):
-      if 'lead' in outs:
-        if outs['lead'].shape[1] == 2 * SplitModelConstants.LEAD_MHP_SELECTION *SplitModelConstants.LEAD_TRAJ_LEN * SplitModelConstants.LEAD_WIDTH:
-          self.parse_mdn('lead', outs, in_N=0, out_N=0,
-                         out_shape=(SplitModelConstants.LEAD_MHP_SELECTION, SplitModelConstants.LEAD_TRAJ_LEN,SplitModelConstants.LEAD_WIDTH))
-        else:
-          self.parse_mdn('lead', outs, in_N=SplitModelConstants.LEAD_MHP_N, out_N=SplitModelConstants.LEAD_MHP_SELECTION,
-                         out_shape=(SplitModelConstants.LEAD_TRAJ_LEN,SplitModelConstants.LEAD_WIDTH))
-      if 'plan' in outs:
-        if outs['plan'].shape[1] > 2 * SplitModelConstants.PLAN_WIDTH * SplitModelConstants.IDX_N:
-          self.parse_mdn('plan', outs, in_N=SplitModelConstants.PLAN_MHP_N, out_N=SplitModelConstants.PLAN_MHP_SELECTION,
-                         out_shape=(SplitModelConstants.IDX_N,SplitModelConstants.PLAN_WIDTH))
-        else:
-          self.parse_mdn('plan', outs, in_N=0, out_N=0,
-                         out_shape=(SplitModelConstants.IDX_N,SplitModelConstants.PLAN_WIDTH))
-    else:
-      if 'lead' in outs:
+    if 'lead' in outs:
+      if self.generation >= 12 and \
+         outs['lead'].shape[1] == 2 * SplitModelConstants.LEAD_MHP_SELECTION * SplitModelConstants.LEAD_TRAJ_LEN * SplitModelConstants.LEAD_WIDTH:
+        self.parse_mdn('lead', outs, in_N=0, out_N=0,
+                       out_shape=(SplitModelConstants.LEAD_MHP_SELECTION, SplitModelConstants.LEAD_TRAJ_LEN, SplitModelConstants.LEAD_WIDTH))
+      else:
         self.parse_mdn('lead', outs, in_N=SplitModelConstants.LEAD_MHP_N, out_N=SplitModelConstants.LEAD_MHP_SELECTION,
-                       out_shape=(SplitModelConstants.LEAD_TRAJ_LEN,SplitModelConstants.LEAD_WIDTH))
-      if 'plan' in outs:
-        self.parse_mdn('plan', outs, in_N=SplitModelConstants.PLAN_MHP_N, out_N=SplitModelConstants.PLAN_MHP_SELECTION,
-                       out_shape=(SplitModelConstants.IDX_N,SplitModelConstants.PLAN_WIDTH))
-
+                       out_shape=(SplitModelConstants.LEAD_TRAJ_LEN, SplitModelConstants.LEAD_WIDTH))
+    if 'plan' in outs:
+      if self.generation >= 12 and \
+        outs['plan'].shape[1] == 2 * SplitModelConstants.IDX_N * SplitModelConstants.PLAN_WIDTH:
+        self.parse_mdn('plan', outs, in_N=0, out_N=0,
+                       out_shape=(SplitModelConstants.IDX_N, SplitModelConstants.PLAN_WIDTH))
+      else:
+        self._parse_plan_mhp(outs)
+        
   def split_outputs(self, outs: dict[str, np.ndarray]) -> None:
     if 'desired_curvature' in outs:
       self.parse_mdn('desired_curvature', outs, in_N=0, out_N=0, out_shape=(SplitModelConstants.DESIRED_CURV_WIDTH,))
