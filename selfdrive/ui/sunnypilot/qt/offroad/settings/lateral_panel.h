@@ -40,6 +40,7 @@ private:
 
   ParamControl *madsToggle;
   ParamControl *pqLateralToggle;
+  ParamControl *pqhca5or7Toggle*;
   PushButtonSP *madsSettingsButton;
   MadsSettings *madsWidget = nullptr;
   PushButtonSP *laneChangeSettingsButton;
