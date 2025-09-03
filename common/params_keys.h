@@ -224,4 +224,5 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"pqLatControlToggle", {PERSISTENT | BACKUP}}, // PLA/HCA Toggle
     {"eEPBopLongToggle", {PERSISTENT | BACKUP}}, // opLong eEPB Toggle
     {"eEPBoeLongToggle", {PERSISTENT | BACKUP}}, // oeLong eEPB Toggle
+    {"pqhca5or7Toggle", {PERSISTENT | BACKUP}}, // oeLong eEPB Toggle
 };

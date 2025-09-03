@@ -95,7 +95,14 @@ LateralPanel::LateralPanel(SettingsWindowSP *parent) : QFrame(parent) {
     tr("Selects the method of Lateral Control between HCA (Torque Based Stock LKAS Messages) and PLA (Angle Based Park Lane Assist) on Volkswagen PQ Platform Vehicles. Leave disabled to use PLA."),
     "");
   pqLateralToggle->setConfirmation(true, false);
-  list->addItem(pqLateralToggle);
+  // Lateral Control HCA Status  For VW PQ (HCA5/7)
+  pqhca5or7Toggle = new ParamControl (
+    "pqhca5or7Toggle",
+    tr("Use HCA5 or HCA7 for VW PQ Lateral Torque"),
+    tr("Selects the HCA Status Mode Of 5 or 7, enable to use HCA7. Use HCA7 at your own risk, it gives your car the ability to turn around corners with a increase in available lateral torque."),
+    "");
+  pqhca5or7Toggle->setConfirmation(true, false);
+  list->addItem(pqhca5or7Toggle);
 
   toggleOffroadOnly = {
     madsToggle, nnlcToggle, pqLateralToggle,
