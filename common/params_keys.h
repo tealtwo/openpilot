@@ -219,4 +219,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"OsmStateTitle", {PERSISTENT, STRING}},
     {"OsmWayTest", {PERSISTENT, STRING}},
     {"RoadName", {CLEAR_ON_ONROAD_TRANSITION, STRING}},
+
+    // VW PQ:
+    {"pqLatControlToggle", {PERSISTENT | BACKUP}}, // PLA/HCA Toggle
+    {"eEPBopLongToggle", {PERSISTENT | BACKUP}}, // opLong eEPB Toggle
+    {"eEPBoeLongToggle", {PERSISTENT | BACKUP}}, // oeLong eEPB Toggle
 };

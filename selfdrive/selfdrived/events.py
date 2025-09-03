@@ -322,7 +322,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.steerTempUnavailableSilent: {
     ET.WARNING: Alert(
-      "Steering Temporarily Unavailable",
+      "Steering Overridden By Driver",
       "",
       AlertStatus.userPrompt, AlertSize.small,
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.prompt, 1.8),

@@ -26,6 +26,21 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
   main_layout->addWidget(cruisePanelScreen);
   main_layout->setCurrentWidget(cruisePanelScreen);
   refresh(offroad);
+  // Long Panel Toggle for eEPB for both oeLong & opLong
+  eEPBopLongToggle = new ParamControl (
+    "eEPBopLongToggle",
+    tr("Enable eEPB for opLong"),
+    tr("Requires Factory Radar FeC/SWaP of 10 00 37 00 (SnG FeC) and EPB coding, ECM to accept FtS ACC coding, and ABS to accept EPB coding. eEPB allows for use of ECD (Electronically Controlled Deceleration) for braking under the ACC limit of 18km/h to allow for FtS & SnG."),
+    "");
+  eEPBopLongToggle->setConfirmation(true, false);
+  list->addItem(eEPBopLongToggle);
+  eEPBoeLongToggle = new ParamControl (
+    "eEPBoeLongToggle",
+    tr("Enable eEPB for oeLong (stock ACC)"),
+    tr("Requires Factory Radar FeC/SWaP of 10 00 37 00 (SnG FeC) and EPB coding, ECM to accept FtS ACC coding, and ABS to accept EPB coding. eEPB allows for use of ECD (Electronically Controlled Deceleration) for braking under the ACC limit of 18km/h to allow for FtS & SnG."),
+    "");
+  eEPBoeLongToggle->setConfirmation(true, false);
+  list->addItem(eEPBoeLongToggle);
 }
 
 void LongitudinalPanel::showEvent(QShowEvent *event) {

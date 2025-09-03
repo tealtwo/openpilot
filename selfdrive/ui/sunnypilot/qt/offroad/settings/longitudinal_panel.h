@@ -25,6 +25,9 @@ private:
   bool is_pcm_cruise = false;
   bool offroad = false;
 
+  ParamControl *eEPBopLongToggle;
+  ParamControl *eEPBoeLongToggle;
+
   QStackedLayout *main_layout = nullptr;
   ScrollViewSP *cruisePanelScroller = nullptr;
   QWidget *cruisePanelScreen = nullptr;
