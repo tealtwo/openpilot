@@ -226,6 +226,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"OsmWayTest", {PERSISTENT, STRING}},
     {"RoadName", {CLEAR_ON_ONROAD_TRANSITION, STRING}},
 
+    // Speed Limit
+    {"SpeedLimitOffsetType", {PERSISTENT | BACKUP, INT, "0"}},
+    {"SpeedLimitPolicy", {PERSISTENT | BACKUP, INT, "3"}},
+    {"SpeedLimitValueOffset", {PERSISTENT | BACKUP, INT, "0"}},
+
     // VW PQ:
     {"pqLatControlToggle", {PERSISTENT | BACKUP}}, // PLA/HCA Toggle
     {"eEPBopLongToggle", {PERSISTENT | BACKUP}}, // opLong eEPB Toggle
