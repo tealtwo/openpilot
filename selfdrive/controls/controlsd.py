@@ -180,7 +180,7 @@ class Controls(ControlsExt, ModelStateBase):
     hudControl.lanesVisible = CC.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
     hudControl.leadDistance = self.sm['longitudinalPlan'].leadDistance
-    hudControl.leadFollowTime = get_T_FOLLOW(hudControl.leadDistanceBars - 1)
+    hudControl.leadFollowTime = 0 #FIXME properly implement this
     hudControl.leadDistanceBars = self.sm['selfdriveState'].personality.raw + 1
     hudControl.visualAlert = self.sm['selfdriveState'].alertHudVisual
 
