@@ -6,39 +6,43 @@ Run this on your Comma 3X to see if navigation is working.
 
 import time
 from cereal import messaging
+from openpilot.common.swaglog import cloudlog
 
 def main():
     sm = messaging.SubMaster(['navStateSP'])
 
-    print("=== Navigation Monitor ===")
-    print("Watching for navigation state...\n")
+    cloudlog.info("=== Navigation Monitor Started ===")
+    cloudlog.info("Watching for navigation state...")
+
+    last_log_time = 0
+    LOG_INTERVAL = 2.0  # Log every 2 seconds to avoid spam
 
     while True:
         sm.update(0)
 
-        if sm.updated['navStateSP']:
-            nav = sm['navStateSP']
+        current_time = time.monotonic()
 
-            print(f"\r[{time.strftime('%H:%M:%S')}]", end=" ")
+        # Log periodically or when state changes
+        if current_time - last_log_time >= LOG_INTERVAL:
+            if sm.valid['navStateSP']:
+                nav = sm['navStateSP']
 
-            if nav.active:
-                print(f"ACTIVE | ", end="")
-                print(f"Dest: {nav.destinationName[:30]:30s} | ", end="")
-                print(f"Dist: {nav.distanceRemaining:6.0f}m | ", end="")
-                print(f"Time: {nav.timeRemaining/60:4.1f}min | ", end="")
+                if nav.active:
+                    status = f"NAV ACTIVE | Dest: {nav.destinationName} | Dist: {nav.distanceRemaining:.0f}m | Time: {nav.timeRemaining/60:.1f}min"
 
-                if nav.nextManeuverValid:
-                    print(f"Next: {nav.nextManeuverDistance:5.0f}m | ", end="")
-                    print(f"Desire: {nav.shouldSendTurnDesire} ", end="")
+                    if nav.nextManeuverValid:
+                        status += f" | Next: {nav.nextManeuverDistance:.0f}m | Turn Desire: {nav.shouldSendTurnDesire}"
+
+                    if nav.targetSpeedValid:
+                        status += f" | Target Speed: {nav.targetSpeed*2.237:.0f}mph"
+
+                    cloudlog.info(f"nav_monitor: {status}")
                 else:
-                    print("No maneuver ", end="")
-
-                if nav.targetSpeedValid:
-                    print(f"| Speed: {nav.targetSpeed*2.237:.0f}mph", end="")
+                    cloudlog.info("nav_monitor: INACTIVE - No destination set")
             else:
-                print("INACTIVE - No destination set", end="")
+                cloudlog.warning("nav_monitor: navStateSP not valid - is navd running?")
 
-            print(" " * 20, end="")  # Clear rest of line
+            last_log_time = current_time
 
         time.sleep(0.2)
 
@@ -46,4 +50,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nMonitor stopped.")
+        cloudlog.info("nav_monitor: Monitor stopped by user")
