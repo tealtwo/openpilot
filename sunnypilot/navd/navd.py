@@ -146,6 +146,8 @@ class NavigationDaemon:
 
     def publish_nav_state(self) -> None:
         """Publish navigation state to NavStateSP message."""
+        cloudlog.info(f"navd: publish_nav_state called, active={self.route_manager.active}")
+
         msg = messaging.new_message('navStateSP')
         nav_state = msg.navStateSP
 
@@ -198,6 +200,7 @@ class NavigationDaemon:
 
         # Send message
         self.pm.send('navStateSP', msg)
+        cloudlog.info(f"navd: navStateSP message sent, active={nav_state.active}")
 
     def _map_maneuver_type(self, maneuver_type: str) -> int:
         """Map string maneuver type to enum value."""
@@ -246,8 +249,12 @@ def main():
 
     cloudlog.info("navd: Starting navigation daemon main loop")
 
+    step_count = 0
     while True:
         daemon.step()
+        step_count += 1
+        if step_count % 10 == 0:  # Log every 2 seconds (10 steps at 5Hz)
+            cloudlog.info(f"navd: Main loop running, step {step_count}")
         rk.keep_time()
 
 
