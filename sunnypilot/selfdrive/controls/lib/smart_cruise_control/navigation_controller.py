@@ -58,7 +58,7 @@ class NavigationController:
 
     def update_navigation_state(self, sm: messaging.SubMaster) -> None:
         """Update navigation state from navStateSP message."""
-        if not sm.valid['navStateSP']:
+        if 'navStateSP' not in sm.valid or not sm.valid['navStateSP']:
             self.nav_active = False
             self.nav_target_speed_valid = False
             return
