@@ -262,4 +262,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"eEPBopLongToggle", {PERSISTENT | BACKUP}}, // opLong eEPB Toggle
     {"eEPBoeLongToggle", {PERSISTENT | BACKUP}}, // oeLong eEPB Toggle
     {"pqhca5or7Toggle", {PERSISTENT | BACKUP}}, // oeLong eEPB Toggle
+
+    // Navigation params
+    {"MapboxToken", {PERSISTENT | BACKUP, STRING}},
+    {"NavigationDestination", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
+    {"NavigationActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
+    {"NavigationSpeedControl", {PERSISTENT | BACKUP, BOOL, "1"}},
 };

@@ -29,7 +29,7 @@ class NavigationDaemon:
         self.pm = messaging.PubMaster(['navStateSP'])
 
         # Get Mapbox token - try parameter first, then use default
-        mapbox_token = self.params.get("MapboxToken", encoding='utf-8')
+        mapbox_token = self.params.get("MapboxToken")
         if not mapbox_token and DEFAULT_MAPBOX_TOKEN:
             cloudlog.info("navd: Using default Mapbox token from code")
             mapbox_token = DEFAULT_MAPBOX_TOKEN
@@ -81,7 +81,7 @@ class NavigationDaemon:
         self.destination_check_counter = 0
 
         # Check for destination parameter
-        destination_json = self.params.get("NavigationDestination", encoding='utf-8')
+        destination_json = self.params.get("NavigationDestination")
 
         if not destination_json:
             # No destination set

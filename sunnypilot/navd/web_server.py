@@ -15,7 +15,7 @@ from openpilot.common.swaglog import cloudlog
 # Get your token from: https://account.mapbox.com/access-tokens/
 # This is the same token used in navd.py
 # ============================================================================
-DEFAULT_MAPBOX_TOKEN = ""  # <-- PUT YOUR MAPBOX TOKEN HERE
+DEFAULT_MAPBOX_TOKEN = "pk.eyJ1IjoidGVhbDIiLCJhIjoiY205Znl1dXBnMXF2eTJrcTFvcnF0NTNnaiJ9.trElYJImmMd1Aie0n3gOMQ"  # <-- PUT YOUR MAPBOX TOKEN HERE
 # ============================================================================
 
 
@@ -342,7 +342,7 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                 return
 
             # Get Mapbox token - try parameter first, then use default
-            mapbox_token = self.params.get("MapboxToken", encoding='utf-8')
+            mapbox_token = self.params.get("MapboxToken")
             if not mapbox_token and DEFAULT_MAPBOX_TOKEN:
                 mapbox_token = DEFAULT_MAPBOX_TOKEN
             elif not mapbox_token:
