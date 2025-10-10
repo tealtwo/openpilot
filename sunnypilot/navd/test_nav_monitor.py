@@ -11,8 +11,8 @@ from openpilot.common.swaglog import cloudlog
 def main():
     sm = messaging.SubMaster(['navStateSP'])
 
-    cloudlog.info("=== Navigation Monitor Started ===")
-    cloudlog.info("Watching for navigation state...")
+    print("=== Navigation Monitor Started ===")
+    print("Watching for navigation state...\n")
 
     last_log_time = 0
     LOG_INTERVAL = 2.0  # Log every 2 seconds to avoid spam
@@ -24,6 +24,9 @@ def main():
 
         # Log periodically or when state changes
         if current_time - last_log_time >= LOG_INTERVAL:
+            print(f"DEBUG: valid={sm.valid['navStateSP']}, updated={sm.updated['navStateSP']}, " +
+                  f"alive={sm.alive['navStateSP']}, freq_ok={sm.freq_ok['navStateSP']}")
+
             if sm.valid['navStateSP']:
                 nav = sm['navStateSP']
 
@@ -36,10 +39,15 @@ def main():
                     if nav.targetSpeedValid:
                         status += f" | Target Speed: {nav.targetSpeed*2.237:.0f}mph"
 
+                    print(f"✓ {status}")
                     cloudlog.info(f"nav_monitor: {status}")
                 else:
+                    print("✓ INACTIVE - No destination set")
                     cloudlog.info("nav_monitor: INACTIVE - No destination set")
             else:
+                # Show what we CAN read even if not valid
+                nav = sm['navStateSP']
+                print(f"✗ NOT VALID - but active={nav.active}, dest={nav.destinationName}")
                 cloudlog.warning("nav_monitor: navStateSP not valid - is navd running?")
 
             last_log_time = current_time
