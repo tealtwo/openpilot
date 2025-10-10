@@ -449,10 +449,13 @@ struct NavStateSP @0xcb9fd56c7057593a {
     exit @2;              # Highway exit
     merge @3;             # Merge onto highway
     fork @4;              # Road fork
-    continue_ @5;         # Continue straight
+    continueStraight @5;  # Continue straight
     arrive @6;            # Arrive at destination
     roundabout @7;        # Enter/exit roundabout
   }
+}
+
+struct CustomReserved10 @0xa8e2e4a8c6f4d3b2 {
 }
 
 struct CustomReserved11 @0xc2243c65e0340384 {

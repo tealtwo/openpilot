@@ -197,7 +197,7 @@ class NavigationDaemon:
             "exit": custom.NavStateSP.ManeuverType.exit,
             "merge": custom.NavStateSP.ManeuverType.merge,
             "fork": custom.NavStateSP.ManeuverType.fork,
-            "continue_": custom.NavStateSP.ManeuverType.continue_,
+            "continue_": custom.NavStateSP.ManeuverType.continueStraight,
             "arrive": custom.NavStateSP.ManeuverType.arrive,
             "roundabout": custom.NavStateSP.ManeuverType.roundabout,
         }
