@@ -146,6 +146,7 @@ class NavigationDaemon:
 
     def publish_nav_state(self) -> None:
         """Publish navigation state to NavStateSP message."""
+        print(f"DEBUG: publish_nav_state called, active={self.route_manager.active}", flush=True)
         cloudlog.info(f"navd: publish_nav_state called, active={self.route_manager.active}")
 
         msg = messaging.new_message('navStateSP')
@@ -199,7 +200,9 @@ class NavigationDaemon:
             nav_state.targetSpeedValid = False
 
         # Send message
+        print(f"DEBUG: About to send navStateSP, active={nav_state.active}", flush=True)
         self.pm.send('navStateSP', msg)
+        print(f"DEBUG: navStateSP message sent!", flush=True)
         cloudlog.info(f"navd: navStateSP message sent, active={nav_state.active}")
 
     def _map_maneuver_type(self, maneuver_type: str) -> int:
@@ -242,11 +245,16 @@ class NavigationDaemon:
 
 
 def main():
+    print("DEBUG: navd main() starting...", flush=True)
     config_realtime_process([0, 1, 2, 3], 5)
 
+    print("DEBUG: Creating Ratekeeper...", flush=True)
     rk = Ratekeeper(5.0, print_delay_threshold=None)  # 5 Hz
+
+    print("DEBUG: Creating NavigationDaemon...", flush=True)
     daemon = NavigationDaemon()
 
+    print("DEBUG: Starting main loop...", flush=True)
     cloudlog.info("navd: Starting navigation daemon main loop")
 
     step_count = 0
@@ -254,6 +262,7 @@ def main():
         daemon.step()
         step_count += 1
         if step_count % 10 == 0:  # Log every 2 seconds (10 steps at 5Hz)
+            print(f"DEBUG: Main loop step {step_count}", flush=True)
             cloudlog.info(f"navd: Main loop running, step {step_count}")
         rk.keep_time()
 
