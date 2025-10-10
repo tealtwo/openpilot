@@ -3,6 +3,7 @@ Copyright ©️ Project Teal Lvbs Licensed Under MIT License
 """
 import json
 import math
+import time
 import requests
 from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
@@ -26,6 +27,10 @@ SPEED_SHARP_TURN = 8.0      # ~18 mph
 SPEED_MODERATE_TURN = 12.0  # ~27 mph
 SPEED_GENTLE_TURN = 16.0    # ~36 mph
 SPEED_EXIT = 15.0           # ~34 mph for highway exits
+
+# Auto-rerouting thresholds
+OFF_ROUTE_DISTANCE_THRESHOLD = 75.0  # meters - trigger reroute if this far from route
+MIN_REROUTE_INTERVAL = 30.0          # seconds - minimum time between reroute attempts
 
 
 @dataclass
@@ -77,6 +82,11 @@ class RouteManager:
         self.distance_along_route = 0.0
         self.distance_remaining = 0.0
         self.time_remaining = 0.0
+        self.last_position: Optional[Coordinate] = None
+
+        # Auto-rerouting state
+        self.last_reroute_time = 0.0
+        self.reroute_attempts = 0
 
         # OSRM demo server (fallback only)
         self.osrm_server = "http://router.project-osrm.org"
@@ -322,6 +332,8 @@ class RouteManager:
         if not self.active or not self.route_geometry:
             return
 
+        self.last_position = current_pos
+
         # Calculate distance along route
         self.distance_along_route = distance_along_geometry(self.route_geometry, current_pos)
 
@@ -334,6 +346,9 @@ class RouteManager:
 
         # Update current maneuver index
         self._update_current_maneuver()
+
+        # Check if we need to reroute
+        self._check_and_reroute(current_pos)
 
     def _update_current_maneuver(self) -> None:
         """Update current maneuver index based on distance along route."""
@@ -413,6 +428,50 @@ class RouteManager:
 
         return None
 
+    def _check_and_reroute(self, current_pos: Coordinate) -> None:
+        """
+        Check if vehicle is off route and trigger reroute if needed.
+
+        Args:
+            current_pos: Current GPS position
+        """
+        if not self.active or not self.route_geometry or not self.destination:
+            return
+
+        # Check time since last reroute
+        current_time = time.monotonic()
+        if current_time - self.last_reroute_time < MIN_REROUTE_INTERVAL:
+            return
+
+        # Calculate distance from route
+        distance_from_route = minimum_distance(self.route_geometry, current_pos)
+
+        # Trigger reroute if too far off course
+        if distance_from_route > OFF_ROUTE_DISTANCE_THRESHOLD:
+            cloudlog.warning(f"navd: Off route by {distance_from_route:.0f}m, triggering reroute (attempt {self.reroute_attempts + 1})")
+            self._trigger_reroute(current_pos)
+
+    def _trigger_reroute(self, current_pos: Coordinate) -> None:
+        """
+        Trigger automatic rerouting from current position to destination.
+
+        Args:
+            current_pos: Current GPS position
+        """
+        if not self.destination:
+            return
+
+        self.last_reroute_time = time.monotonic()
+        self.reroute_attempts += 1
+
+        # Calculate new route from current position
+        success = self.calculate_route(current_pos, self.destination, self.destination_name)
+
+        if success:
+            cloudlog.info(f"navd: Reroute successful (attempt {self.reroute_attempts})")
+        else:
+            cloudlog.error(f"navd: Reroute failed (attempt {self.reroute_attempts})")
+
     def cancel_navigation(self) -> None:
         """Cancel active navigation."""
         self.active = False
@@ -421,4 +480,6 @@ class RouteManager:
         self.current_maneuver_index = 0
         self.destination = None
         self.destination_name = ""
+        self.last_reroute_time = 0.0
+        self.reroute_attempts = 0
         cloudlog.info("navd: Navigation cancelled")

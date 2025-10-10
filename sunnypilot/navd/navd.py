@@ -90,11 +90,12 @@ class NavigationDaemon:
                 self.route_manager.cancel_navigation()
             return
 
-        # Check if destination changed
-        if destination_json == self.last_destination_json:
-            return
+        # Check if destination changed or if we need to retry due to GPS
+        destination_changed = destination_json != self.last_destination_json
+        need_route_calc = destination_changed or (destination_json and not self.route_manager.active)
 
-        self.last_destination_json = destination_json
+        if not need_route_calc:
+            return
 
         try:
             dest_data = json.loads(destination_json)
@@ -104,16 +105,21 @@ class NavigationDaemon:
 
             if dest_lat is None or dest_lon is None:
                 cloudlog.error("navd: Invalid destination data")
+                self.last_destination_json = destination_json  # Mark as processed even if invalid
                 return
 
             # Check if we have a valid current position
             if not self.current_position or not self.localizer_valid:
-                cloudlog.warning("navd: Cannot calculate route - no valid GPS position")
+                # Don't update last_destination_json so we retry when GPS becomes valid
+                if destination_changed:
+                    cloudlog.warning("navd: Waiting for valid GPS position to calculate route...")
                 return
 
             destination = Coordinate(dest_lat, dest_lon)
 
-            cloudlog.info(f"navd: New destination set: {dest_name} ({dest_lat}, {dest_lon})")
+            # Only log on new destinations, not retries
+            if destination_changed:
+                cloudlog.info(f"navd: New destination set: {dest_name} ({dest_lat}, {dest_lon})")
 
             # Calculate route
             success = self.route_manager.calculate_route(
@@ -125,14 +131,18 @@ class NavigationDaemon:
             if success:
                 cloudlog.info("navd: Route calculation succeeded")
                 self.params.put_bool("NavigationActive", True)
+                self.last_destination_json = destination_json  # Mark as processed after success
             else:
                 cloudlog.error("navd: Route calculation failed")
                 self.params.put_bool("NavigationActive", False)
+                self.last_destination_json = destination_json  # Mark as processed even if failed
 
         except json.JSONDecodeError as e:
             cloudlog.error(f"navd: Failed to parse destination JSON: {e}")
+            self.last_destination_json = destination_json  # Mark as processed
         except Exception as e:
             cloudlog.exception(f"navd: Error processing destination update: {e}")
+            self.last_destination_json = destination_json  # Mark as processed
 
     def publish_nav_state(self) -> None:
         """Publish navigation state to NavStateSP message."""
