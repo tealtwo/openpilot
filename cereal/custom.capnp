@@ -165,6 +165,7 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   struct SmartCruiseControl {
     vision @0 :Vision;
     map @1 :Map;
+    navigation @2 :Navigation;
 
     struct Vision {
       state @0 :VisionState;
@@ -177,6 +178,14 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
     }
 
     struct Map {
+      state @0 :MapState;
+      vTarget @1 :Float32;
+      aTarget @2 :Float32;
+      enabled @3 :Bool;
+      active @4 :Bool;
+    }
+
+    struct Navigation {
       state @0 :MapState;
       vTarget @1 :Float32;
       aTarget @2 :Float32;

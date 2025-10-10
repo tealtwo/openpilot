@@ -123,6 +123,13 @@ class LongitudinalPlannerSP:
     sccMap.aTarget = float(self.scc.map.output_a_target)
     sccMap.enabled = self.scc.map.is_enabled
     sccMap.active = self.scc.map.is_active
+    # Navigation Control
+    sccNav = smartCruiseControl.navigation
+    sccNav.state = self.nav.state
+    sccNav.vTarget = float(self.nav.output_v_target)
+    sccNav.aTarget = float(self.nav.output_a_target)
+    sccNav.enabled = self.nav.is_enabled
+    sccNav.active = self.nav.is_active
 
     # Speed Limit
     speedLimit = longitudinalPlanSP.speedLimit

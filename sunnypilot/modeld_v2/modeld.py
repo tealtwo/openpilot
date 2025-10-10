@@ -354,7 +354,8 @@ def main(demo=False):
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
       # Update navigation turn desires before updating desire helper
-      DH.lane_turn_controller.update_nav_turn(sm['navStateSP'] if sm.valid['navStateSP'] else None)
+      # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
+      DH.lane_turn_controller.update_nav_turn(sm['navStateSP'] if sm.alive['navStateSP'] else None)
       DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
