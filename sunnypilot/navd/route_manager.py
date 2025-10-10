@@ -443,13 +443,33 @@ class RouteManager:
         if current_time - self.last_reroute_time < MIN_REROUTE_INTERVAL:
             return
 
-        # Calculate distance from route
-        distance_from_route = minimum_distance(self.route_geometry, current_pos)
+        # Calculate distance from route (find minimum distance to any segment)
+        distance_from_route = self._get_distance_from_route(current_pos)
 
         # Trigger reroute if too far off course
         if distance_from_route > OFF_ROUTE_DISTANCE_THRESHOLD:
             cloudlog.warning(f"navd: Off route by {distance_from_route:.0f}m, triggering reroute (attempt {self.reroute_attempts + 1})")
             self._trigger_reroute(current_pos)
+
+    def _get_distance_from_route(self, pos: Coordinate) -> float:
+        """
+        Calculate minimum distance from position to route.
+
+        Args:
+            pos: Current position
+
+        Returns:
+            Minimum distance to route in meters
+        """
+        if len(self.route_geometry) < 2:
+            return 0.0
+
+        min_dist = float('inf')
+        for i in range(len(self.route_geometry) - 1):
+            dist = minimum_distance(self.route_geometry[i], self.route_geometry[i + 1], pos)
+            min_dist = min(min_dist, dist)
+
+        return min_dist
 
     def _trigger_reroute(self, current_pos: Coordinate) -> None:
         """
