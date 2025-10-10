@@ -17,6 +17,10 @@ def main():
     last_log_time = 0
     LOG_INTERVAL = 2.0  # Log every 2 seconds to avoid spam
 
+    # Track initial distance for progress calculation
+    initial_distance = None
+    last_destination = ""
+
     while True:
         sm.update(0)
 
@@ -24,31 +28,46 @@ def main():
 
         # Log periodically or when state changes
         if current_time - last_log_time >= LOG_INTERVAL:
-            print(f"DEBUG: valid={sm.valid['navStateSP']}, updated={sm.updated['navStateSP']}, " +
-                  f"alive={sm.alive['navStateSP']}, freq_ok={sm.freq_ok['navStateSP']}")
-
-            if sm.valid['navStateSP']:
+            # Use alive check since valid might be strict
+            if sm.alive['navStateSP']:
                 nav = sm['navStateSP']
 
                 if nav.active:
-                    status = f"NAV ACTIVE | Dest: {nav.destinationName} | Dist: {nav.distanceRemaining:.0f}m | Time: {nav.timeRemaining/60:.1f}min"
+                    # Reset initial distance if destination changed
+                    if nav.destinationName != last_destination:
+                        initial_distance = nav.distanceRemaining
+                        last_destination = nav.destinationName
+
+                    # Calculate progress percentage
+                    progress = 0.0
+                    if initial_distance and initial_distance > 0:
+                        progress = ((initial_distance - nav.distanceRemaining) / initial_distance) * 100
+                        progress = max(0, min(100, progress))  # Clamp to 0-100%
+                        progress_bar = "█" * int(progress / 5) + "░" * (20 - int(progress / 5))
+                        status = f"🚗 [{progress_bar}] {progress:.1f}% | {nav.destinationName}"
+                    else:
+                        status = f"🚗 Starting... | {nav.destinationName}"
+
+                    status += f"\n   Remaining: {nav.distanceRemaining:.0f}m ({nav.timeRemaining/60:.1f}min)"
 
                     if nav.nextManeuverValid:
-                        status += f" | Next: {nav.nextManeuverDistance:.0f}m | Turn Desire: {nav.shouldSendTurnDesire}"
+                        status += f"\n   Next Turn: {nav.nextManeuverDistance:.0f}m"
+                        if nav.shouldSendTurnDesire:
+                            status += f" 🔄 TURNING"
 
                     if nav.targetSpeedValid:
-                        status += f" | Target Speed: {nav.targetSpeed*2.237:.0f}mph"
+                        status += f"\n   Target Speed: {nav.targetSpeed*2.237:.0f}mph"
 
-                    print(f"✓ {status}")
-                    cloudlog.info(f"nav_monitor: {status}")
+                    print(f"{status}\n")
+                    cloudlog.info(f"nav_monitor: Progress {progress:.1f}% - {nav.distanceRemaining:.0f}m remaining")
                 else:
-                    print("✓ INACTIVE - No destination set")
-                    cloudlog.info("nav_monitor: INACTIVE - No destination set")
+                    print("⏸ INACTIVE - No destination set\n")
+                    initial_distance = None
+                    last_destination = ""
+                    cloudlog.info("nav_monitor: INACTIVE")
             else:
-                # Show what we CAN read even if not valid
-                nav = sm['navStateSP']
-                print(f"✗ NOT VALID - but active={nav.active}, dest={nav.destinationName}")
-                cloudlog.warning("nav_monitor: navStateSP not valid - is navd running?")
+                print("❌ navStateSP not available - is navd running?\n")
+                cloudlog.warning("nav_monitor: navStateSP not available")
 
             last_log_time = current_time
 
