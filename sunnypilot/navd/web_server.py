@@ -125,7 +125,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>🗺️ openpilot Navigation</h1>
+        <h1>Navigate on SunnyPilot</h1>
 
         <div class="tab-buttons">
             <button class="tab-button active" onclick="switchTab('address')">Address Search</button>
