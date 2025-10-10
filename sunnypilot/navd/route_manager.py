@@ -88,6 +88,10 @@ class RouteManager:
         self.last_reroute_time = 0.0
         self.reroute_attempts = 0
 
+        # Turn desire state tracking (for logging)
+        self.last_turn_desire_active = False
+        self.last_turn_direction = "none"
+
         # OSRM demo server (fallback only)
         self.osrm_server = "http://router.project-osrm.org"
 
@@ -400,14 +404,28 @@ class RouteManager:
             return False, "none"
 
         # Send turn desires when within threshold distance
+        should_send = False
+        direction = "none"
+
         if 0 <= distance_to_maneuver <= TURN_DESIRE_START_DISTANCE:
-            return True, maneuver.direction
+            should_send = True
+            direction = maneuver.direction
+        elif distance_to_maneuver < -TURN_DESIRE_END_DISTANCE:
+            should_send = False
+            direction = "none"
 
-        # Stop sending after we've passed the maneuver
-        if distance_to_maneuver < -TURN_DESIRE_END_DISTANCE:
-            return False, "none"
+        # Log when turn desire state changes
+        if should_send != self.last_turn_desire_active or direction != self.last_turn_direction:
+            if should_send:
+                cloudlog.info(f"navd: 🔄 TURN DESIRE ACTIVE - Direction: {direction.upper()} | "
+                             f"Distance: {distance_to_maneuver:.0f}m | Maneuver: {maneuver.description}")
+            else:
+                cloudlog.info(f"navd: ✓ Turn desire cleared")
 
-        return False, "none"
+            self.last_turn_desire_active = should_send
+            self.last_turn_direction = direction
+
+        return should_send, direction
 
     def get_target_speed(self) -> Optional[float]:
         """

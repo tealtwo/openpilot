@@ -57,7 +57,14 @@ class LaneTurnController:
 
     # Check if navigation is active and wants to send turn desires
     if nav_state.active and nav_state.shouldSendTurnDesire:
-      self.nav_turn_direction = nav_state.turnDesireDirection
+      # Convert capnp enum integer to custom.TurnDirection enum
+      turn_dir_int = nav_state.turnDesireDirection
+      if turn_dir_int == custom.TurnDirection.turnLeft:
+        self.nav_turn_direction = custom.TurnDirection.turnLeft
+      elif turn_dir_int == custom.TurnDirection.turnRight:
+        self.nav_turn_direction = custom.TurnDirection.turnRight
+      else:
+        self.nav_turn_direction = custom.TurnDirection.none
       self.nav_enabled = True
     else:
       self.nav_turn_direction = custom.TurnDirection.none
