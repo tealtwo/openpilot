@@ -21,6 +21,10 @@ class LaneTurnController:
     self.param_read_counter = 0
     self.enabled = self.params.get_bool("LaneTurnDesire")
 
+    # Navigation-based turn desires
+    self.nav_turn_direction = custom.TurnDirection.none
+    self.nav_enabled = False
+
   def read_params(self):
     self.enabled = self.params.get_bool("LaneTurnDesire")
     value = float(self.params.get("LaneTurnValue", return_default=True)) * CV.MPH_TO_MS
@@ -39,7 +43,32 @@ class LaneTurnController:
     else:
       self.turn_direction = custom.TurnDirection.none
 
+  def update_nav_turn(self, nav_state) -> None:
+    """
+    Update turn direction based on navigation state.
+
+    Args:
+      nav_state: NavStateSP message from navd
+    """
+    if not nav_state:
+      self.nav_turn_direction = custom.TurnDirection.none
+      self.nav_enabled = False
+      return
+
+    # Check if navigation is active and wants to send turn desires
+    if nav_state.active and nav_state.shouldSendTurnDesire:
+      self.nav_turn_direction = nav_state.turnDesireDirection
+      self.nav_enabled = True
+    else:
+      self.nav_turn_direction = custom.TurnDirection.none
+      self.nav_enabled = False
+
   def get_turn_direction(self):
     if not self.enabled:
       return custom.TurnDirection.none
+
+    # Navigation turn desires take priority over blinker-based turn desires
+    if self.nav_enabled and self.nav_turn_direction != custom.TurnDirection.none:
+      return self.nav_turn_direction
+
     return self.turn_direction

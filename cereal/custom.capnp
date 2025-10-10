@@ -246,6 +246,7 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
     sccVision @1;
     sccMap @2;
     speedLimitAssist @3;
+    navigation @4;
   }
 
   struct E2eAlerts {
@@ -411,7 +412,47 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
     turnRight @2;
   }
 
-struct CustomReserved10 @0xcb9fd56c7057593a {
+struct NavStateSP @0xcb9fd56c7057593a {
+  # Navigation state and guidance information
+  active @0 :Bool;                          # Whether navigation is currently active
+  destinationValid @1 :Bool;                # Whether we have a valid destination
+
+  # Current position and route info
+  distanceRemaining @2 :Float32;            # Total distance remaining to destination (m)
+  timeRemaining @3 :Float32;                # Estimated time remaining to destination (s)
+  currentSegmentIndex @4 :UInt32;           # Index of current route segment
+  totalSegments @5 :UInt32;                 # Total number of segments in route
+
+  # Next maneuver information
+  nextManeuverValid @6 :Bool;               # Whether next maneuver data is valid
+  nextManeuverDistance @7 :Float32;         # Distance to next maneuver (m)
+  nextManeuverType @8 :ManeuverType;        # Type of next maneuver
+  nextManeuverDirection @9 :TurnDirection;  # Direction for next maneuver
+  nextManeuverDescription @10 :Text;        # Human-readable maneuver description
+
+  # Turn desire control for lateral planning
+  shouldSendTurnDesire @11 :Bool;           # Whether to send turn desires to model
+  turnDesireDirection @12 :TurnDirection;   # Direction for turn desire
+
+  # Speed guidance for longitudinal planning
+  targetSpeed @13 :Float32;                 # Target speed for upcoming maneuver (m/s)
+  targetSpeedValid @14 :Bool;               # Whether target speed is valid
+
+  # Destination info
+  destinationLatitude @15 :Float64;
+  destinationLongitude @16 :Float64;
+  destinationName @17 :Text;
+
+  enum ManeuverType {
+    none @0;
+    turn @1;              # Regular turn at intersection
+    exit @2;              # Highway exit
+    merge @3;             # Merge onto highway
+    fork @4;              # Road fork
+    continue_ @5;         # Continue straight
+    arrive @6;            # Arrive at destination
+    roundabout @7;        # Enter/exit roundabout
+  }
 }
 
 struct CustomReserved11 @0xc2243c65e0340384 {
