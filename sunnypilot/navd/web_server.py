@@ -375,32 +375,32 @@ HTML_TEMPLATE = """
                 document.getElementById('debug-status').style.color = status.active ? '#4CAF50' : '#999';
 
                 // Update GPS POSITION
-                document.getElementById('debug-gps-lat').textContent = status.gps_lat !== null ? status.gps_lat.toFixed(6) : 'N/A';
-                document.getElementById('debug-gps-lon').textContent = status.gps_lon !== null ? status.gps_lon.toFixed(6) : 'N/A';
+                document.getElementById('debug-gps-lat').textContent = (status.gps_lat != null) ? status.gps_lat.toFixed(6) : 'N/A';
+                document.getElementById('debug-gps-lon').textContent = (status.gps_lon != null) ? status.gps_lon.toFixed(6) : 'N/A';
                 document.getElementById('debug-gps-valid').textContent = status.gps_valid ? 'Yes' : 'No';
 
                 // Update DESTINATION
                 document.getElementById('debug-dest-name').textContent = status.dest_name || 'N/A';
                 document.getElementById('debug-dest-coords').textContent =
-                    (status.dest_lat !== null && status.dest_lon !== null)
+                    (status.dest_lat != null && status.dest_lon != null)
                     ? `${status.dest_lat.toFixed(6)}, ${status.dest_lon.toFixed(6)}`
                     : 'N/A';
                 document.getElementById('debug-dist-remaining').textContent =
-                    status.distance_remaining !== null
+                    (status.distance_remaining != null)
                     ? `${status.distance_remaining.toFixed(0)}m (${(status.distance_remaining * 0.000621371).toFixed(2)}mi)`
                     : 'N/A';
                 document.getElementById('debug-time-remaining').textContent =
-                    status.time_remaining !== null
+                    (status.time_remaining != null)
                     ? `${Math.floor(status.time_remaining / 60)}min ${Math.floor(status.time_remaining % 60)}s`
                     : 'N/A';
 
                 // Update ROUTE PROGRESS
                 document.getElementById('debug-segment').textContent =
-                    (status.current_segment !== null && status.total_segments !== null)
+                    (status.current_segment != null && status.total_segments != null)
                     ? `${status.current_segment + 1} / ${status.total_segments}`
                     : 'N/A';
 
-                if (status.current_segment !== null && status.total_segments !== null && status.total_segments > 0) {
+                if (status.current_segment != null && status.total_segments != null && status.total_segments > 0) {
                     const progress = ((status.current_segment + 1) / status.total_segments) * 100;
                     document.getElementById('debug-progress').style.width = progress + '%';
                     document.getElementById('debug-progress-text').textContent = Math.round(progress) + '%';
@@ -418,19 +418,20 @@ HTML_TEMPLATE = """
                 document.getElementById('debug-maneuver-dir').textContent =
                     status.next_maneuver_valid ? (maneuverDirs[status.next_maneuver_direction] || 'unknown') : 'N/A';
                 document.getElementById('debug-maneuver-dist').textContent =
-                    status.next_maneuver_valid ? `${status.next_maneuver_distance.toFixed(0)}m` : 'N/A';
+                    (status.next_maneuver_valid && status.next_maneuver_distance != null) ? `${status.next_maneuver_distance.toFixed(0)}m` : 'N/A';
                 document.getElementById('debug-maneuver-desc').textContent =
-                    status.next_maneuver_valid ? status.next_maneuver_description : 'N/A';
+                    status.next_maneuver_valid ? (status.next_maneuver_description || 'N/A') : 'N/A';
 
                 // Update TURN DESIRES
                 const turnDirs = ['none', 'left', 'right'];
-                document.getElementById('debug-turn-active').textContent = status.turn_desire_active ? 'Yes ←' + (turnDirs[status.turn_desire_direction] || 'unknown').toUpperCase() : 'No';
+                const turnDir = (status.turn_desire_direction != null) ? (turnDirs[status.turn_desire_direction] || 'unknown') : 'none';
+                document.getElementById('debug-turn-active').textContent = status.turn_desire_active ? `Yes - ${turnDir.toUpperCase()}` : 'No';
                 document.getElementById('debug-turn-active').style.color = status.turn_desire_active ? '#f44336' : '#999';
-                document.getElementById('debug-turn-dir').textContent = turnDirs[status.turn_desire_direction] || 'none';
+                document.getElementById('debug-turn-dir').textContent = turnDir;
 
                 // Update SPEED TARGET
                 document.getElementById('debug-speed-target').textContent =
-                    status.target_speed_valid
+                    (status.target_speed_valid && status.target_speed != null)
                     ? `${status.target_speed.toFixed(1)} m/s (${(status.target_speed * 2.23694).toFixed(0)} mph)`
                     : 'N/A';
                 document.getElementById('debug-speed-valid').textContent = status.target_speed_valid ? 'Yes' : 'No';
