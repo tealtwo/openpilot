@@ -734,13 +734,13 @@ class NavigationWebServer(BaseHTTPRequestHandler):
 
                     if nav.nextManeuverValid:
                         status['next_maneuver_valid'] = True
-                        status['next_maneuver_type'] = nav.nextManeuverType
-                        status['next_maneuver_direction'] = nav.nextManeuverDirection
+                        status['next_maneuver_type'] = int(nav.nextManeuverType)  # Convert enum to int for JSON
+                        status['next_maneuver_direction'] = int(nav.nextManeuverDirection)  # Convert enum to int
                         status['next_maneuver_distance'] = nav.nextManeuverDistance
                         status['next_maneuver_description'] = nav.nextManeuverDescription
 
                     status['turn_desire_active'] = nav.shouldSendTurnDesire
-                    status['turn_desire_direction'] = nav.turnDesireDirection
+                    status['turn_desire_direction'] = int(nav.turnDesireDirection) if nav.turnDesireDirection is not None else None
 
                     if nav.targetSpeedValid:
                         status['target_speed_valid'] = True
