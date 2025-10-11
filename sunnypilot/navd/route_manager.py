@@ -32,6 +32,9 @@ SPEED_EXIT = 15.0           # ~34 mph for highway exits
 OFF_ROUTE_DISTANCE_THRESHOLD = 75.0  # meters - trigger reroute if this far from route
 MIN_REROUTE_INTERVAL = 30.0          # seconds - minimum time between reroute attempts
 
+# Arrival detection threshold
+ARRIVAL_THRESHOLD = 10.0  # meters - consider arrived when this close to destination
+
 
 @dataclass
 class Maneuver:
@@ -92,6 +95,9 @@ class RouteManager:
         self.last_turn_desire_active = False
         self.last_turn_direction = "none"
 
+        # Arrival detection
+        self.has_arrived_flag = False
+
         # OSRM demo server (fallback only)
         self.osrm_server = "http://router.project-osrm.org"
 
@@ -116,6 +122,7 @@ class RouteManager:
                 self.destination_name = destination_name
                 self.active = True
                 self.current_maneuver_index = 0
+                self.has_arrived_flag = False  # Reset arrival flag for new route
                 cloudlog.info(f"navd: Route calculated successfully with {len(self.maneuvers)} maneuvers")
                 return True
             return False
@@ -520,4 +527,50 @@ class RouteManager:
         self.destination_name = ""
         self.last_reroute_time = 0.0
         self.reroute_attempts = 0
+        self.has_arrived_flag = False
         cloudlog.info("navd: Navigation cancelled")
+
+    def check_arrival(self, current_pos: Coordinate) -> bool:
+        """
+        Check if vehicle has arrived at destination.
+
+        Uses three detection criteria:
+        1. Distance remaining < threshold
+        2. Direct distance to destination < threshold
+        3. Last maneuver is "arrive" type and vehicle has passed it
+
+        Args:
+            current_pos: Current GPS position
+
+        Returns:
+            True if arrived at destination
+        """
+        # Don't check arrival if not navigating or already arrived
+        if not self.active or not self.destination or self.has_arrived_flag:
+            return False
+
+        # Criterion 1: Distance remaining along route is very small
+        if self.distance_remaining < ARRIVAL_THRESHOLD:
+            self.has_arrived_flag = True
+            cloudlog.info(f"navd: 🎯 ARRIVED - Distance remaining: {self.distance_remaining:.1f}m")
+            return True
+
+        # Criterion 2: Direct distance to destination (as-the-crow-flies)
+        direct_distance = current_pos.distance_to(self.destination)
+        if direct_distance < ARRIVAL_THRESHOLD:
+            self.has_arrived_flag = True
+            cloudlog.info(f"navd: 🎯 ARRIVED - Direct distance to destination: {direct_distance:.1f}m")
+            return True
+
+        # Criterion 3: Last maneuver is "arrive" type and we've passed it
+        if self.maneuvers:
+            last_maneuver = self.maneuvers[-1]
+            if last_maneuver.type == "arrive":
+                # Check if we've passed the arrive maneuver
+                distance_to_arrive = last_maneuver.distance_from_start - self.distance_along_route
+                if distance_to_arrive < -ARRIVAL_THRESHOLD:  # Negative means we've passed it
+                    self.has_arrived_flag = True
+                    cloudlog.info(f"navd: 🎯 ARRIVED - Passed arrival maneuver")
+                    return True
+
+        return False

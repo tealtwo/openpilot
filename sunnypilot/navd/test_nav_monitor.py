@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Quick script to monitor navigation status.
-Run this on your Comma 3X to see if navigation is working.
 """
 
 import time
