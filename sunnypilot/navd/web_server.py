@@ -3,10 +3,12 @@
 Copyright ©️ Project Teal Lvbs Licensed Under MIT License
 """
 import json
+import math
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 import requests
 
+from cereal import messaging, log
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 
@@ -121,6 +123,65 @@ HTML_TEMPLATE = """
         .tab-content.active {
             display: block;
         }
+        .debug-refresh {
+            text-align: center;
+            padding: 10px;
+            background-color: #e3f2fd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            color: #1976d2;
+            font-size: 14px;
+        }
+        .debug-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        .debug-header {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .debug-label {
+            color: #666;
+            font-weight: 500;
+        }
+        .debug-value {
+            color: #333;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+        }
+        .debug-progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .debug-progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .debug-progress-text {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -130,6 +191,7 @@ HTML_TEMPLATE = """
         <div class="tab-buttons">
             <button class="tab-button active" onclick="switchTab('address')">Address Search</button>
             <button class="tab-button" onclick="switchTab('coords')">Coordinates</button>
+            <button class="tab-button" onclick="switchTab('debug')">Debug</button>
         </div>
 
         <!-- Address Search Tab -->
@@ -165,22 +227,216 @@ HTML_TEMPLATE = """
             </form>
         </div>
 
+        <!-- Debug Tab -->
+        <div id="debug-tab" class="tab-content">
+            <div class="debug-refresh">🔄 Auto-refreshing every 1s</div>
+
+            <div class="debug-section">
+                <div class="debug-header">STATUS</div>
+                <div class="debug-row">
+                    <span class="debug-label">Navigation:</span>
+                    <span class="debug-value" id="debug-status">○ Inactive</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">GPS POSITION</div>
+                <div class="debug-row">
+                    <span class="debug-label">Latitude:</span>
+                    <span class="debug-value" id="debug-gps-lat">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Longitude:</span>
+                    <span class="debug-value" id="debug-gps-lon">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Valid:</span>
+                    <span class="debug-value" id="debug-gps-valid">No</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">DESTINATION</div>
+                <div class="debug-row">
+                    <span class="debug-label">Name:</span>
+                    <span class="debug-value" id="debug-dest-name">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Coordinates:</span>
+                    <span class="debug-value" id="debug-dest-coords">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Distance:</span>
+                    <span class="debug-value" id="debug-dist-remaining">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Time:</span>
+                    <span class="debug-value" id="debug-time-remaining">N/A</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">ROUTE PROGRESS</div>
+                <div class="debug-row">
+                    <span class="debug-label">Segment:</span>
+                    <span class="debug-value" id="debug-segment">N/A</span>
+                </div>
+                <div class="debug-progress-bar">
+                    <div class="debug-progress-fill" id="debug-progress"></div>
+                </div>
+                <div class="debug-progress-text" id="debug-progress-text">0%</div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">NEXT MANEUVER</div>
+                <div class="debug-row">
+                    <span class="debug-label">Type:</span>
+                    <span class="debug-value" id="debug-maneuver-type">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Direction:</span>
+                    <span class="debug-value" id="debug-maneuver-dir">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Distance:</span>
+                    <span class="debug-value" id="debug-maneuver-dist">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Description:</span>
+                    <span class="debug-value" id="debug-maneuver-desc">N/A</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">TURN DESIRES</div>
+                <div class="debug-row">
+                    <span class="debug-label">Active:</span>
+                    <span class="debug-value" id="debug-turn-active">No</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Direction:</span>
+                    <span class="debug-value" id="debug-turn-dir">None</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">SPEED TARGET</div>
+                <div class="debug-row">
+                    <span class="debug-label">Target:</span>
+                    <span class="debug-value" id="debug-speed-target">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Valid:</span>
+                    <span class="debug-value" id="debug-speed-valid">No</span>
+                </div>
+            </div>
+        </div>
+
         <div id="status" class="status"></div>
     </div>
 
     <script>
+        let debugInterval = null;
+
         function switchTab(tab) {
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
 
+            // Stop debug polling if switching away from debug tab
+            if (debugInterval) {
+                clearInterval(debugInterval);
+                debugInterval = null;
+            }
+
             // Show selected tab
             if (tab === 'address') {
                 document.getElementById('address-tab').classList.add('active');
                 document.querySelectorAll('.tab-button')[0].classList.add('active');
-            } else {
+            } else if (tab === 'coords') {
                 document.getElementById('coords-tab').classList.add('active');
                 document.querySelectorAll('.tab-button')[1].classList.add('active');
+            } else if (tab === 'debug') {
+                document.getElementById('debug-tab').classList.add('active');
+                document.querySelectorAll('.tab-button')[2].classList.add('active');
+                // Start debug polling
+                updateDebugPanel(); // Immediate update
+                debugInterval = setInterval(updateDebugPanel, 1000); // Update every 1 second
+            }
+        }
+
+        async function updateDebugPanel() {
+            try {
+                const response = await fetch('/nav_status');
+                const status = await response.json();
+
+                // Update STATUS
+                document.getElementById('debug-status').textContent = status.active ? '● Active' : '○ Inactive';
+                document.getElementById('debug-status').style.color = status.active ? '#4CAF50' : '#999';
+
+                // Update GPS POSITION
+                document.getElementById('debug-gps-lat').textContent = status.gps_lat !== null ? status.gps_lat.toFixed(6) : 'N/A';
+                document.getElementById('debug-gps-lon').textContent = status.gps_lon !== null ? status.gps_lon.toFixed(6) : 'N/A';
+                document.getElementById('debug-gps-valid').textContent = status.gps_valid ? 'Yes' : 'No';
+
+                // Update DESTINATION
+                document.getElementById('debug-dest-name').textContent = status.dest_name || 'N/A';
+                document.getElementById('debug-dest-coords').textContent =
+                    (status.dest_lat !== null && status.dest_lon !== null)
+                    ? `${status.dest_lat.toFixed(6)}, ${status.dest_lon.toFixed(6)}`
+                    : 'N/A';
+                document.getElementById('debug-dist-remaining').textContent =
+                    status.distance_remaining !== null
+                    ? `${status.distance_remaining.toFixed(0)}m (${(status.distance_remaining * 0.000621371).toFixed(2)}mi)`
+                    : 'N/A';
+                document.getElementById('debug-time-remaining').textContent =
+                    status.time_remaining !== null
+                    ? `${Math.floor(status.time_remaining / 60)}min ${Math.floor(status.time_remaining % 60)}s`
+                    : 'N/A';
+
+                // Update ROUTE PROGRESS
+                document.getElementById('debug-segment').textContent =
+                    (status.current_segment !== null && status.total_segments !== null)
+                    ? `${status.current_segment + 1} / ${status.total_segments}`
+                    : 'N/A';
+
+                if (status.current_segment !== null && status.total_segments !== null && status.total_segments > 0) {
+                    const progress = ((status.current_segment + 1) / status.total_segments) * 100;
+                    document.getElementById('debug-progress').style.width = progress + '%';
+                    document.getElementById('debug-progress-text').textContent = Math.round(progress) + '%';
+                } else {
+                    document.getElementById('debug-progress').style.width = '0%';
+                    document.getElementById('debug-progress-text').textContent = '0%';
+                }
+
+                // Update NEXT MANEUVER
+                const maneuverTypes = ['none', 'turn', 'exit', 'merge', 'fork', 'continue', 'arrive', 'roundabout'];
+                const maneuverDirs = ['none', 'left', 'right'];  // TurnDirection enum: none=0, turnLeft=1, turnRight=2
+
+                document.getElementById('debug-maneuver-type').textContent =
+                    status.next_maneuver_valid ? (maneuverTypes[status.next_maneuver_type] || 'unknown') : 'N/A';
+                document.getElementById('debug-maneuver-dir').textContent =
+                    status.next_maneuver_valid ? (maneuverDirs[status.next_maneuver_direction] || 'unknown') : 'N/A';
+                document.getElementById('debug-maneuver-dist').textContent =
+                    status.next_maneuver_valid ? `${status.next_maneuver_distance.toFixed(0)}m` : 'N/A';
+                document.getElementById('debug-maneuver-desc').textContent =
+                    status.next_maneuver_valid ? status.next_maneuver_description : 'N/A';
+
+                // Update TURN DESIRES
+                const turnDirs = ['none', 'left', 'right'];
+                document.getElementById('debug-turn-active').textContent = status.turn_desire_active ? 'Yes ←' + (turnDirs[status.turn_desire_direction] || 'unknown').toUpperCase() : 'No';
+                document.getElementById('debug-turn-active').style.color = status.turn_desire_active ? '#f44336' : '#999';
+                document.getElementById('debug-turn-dir').textContent = turnDirs[status.turn_desire_direction] || 'none';
+
+                // Update SPEED TARGET
+                document.getElementById('debug-speed-target').textContent =
+                    status.target_speed_valid
+                    ? `${status.target_speed.toFixed(1)} m/s (${(status.target_speed * 2.23694).toFixed(0)} mph)`
+                    : 'N/A';
+                document.getElementById('debug-speed-valid').textContent = status.target_speed_valid ? 'Yes' : 'No';
+
+            } catch (error) {
+                console.error('Failed to update debug panel:', error);
             }
         }
 
@@ -282,6 +538,8 @@ class NavigationWebServer(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.end_headers()
             self.wfile.write(HTML_TEMPLATE.encode())
+        elif self.path == '/nav_status':
+            self._handle_nav_status()
         else:
             self.send_response(404)
             self.end_headers()
@@ -406,6 +664,92 @@ class NavigationWebServer(BaseHTTPRequestHandler):
         except Exception as e:
             cloudlog.exception(f"navd: Error cancelling navigation: {e}")
             self._send_json_response({'success': False, 'error': str(e)})
+
+    def _handle_nav_status(self):
+        """Return current navigation status as JSON."""
+        try:
+            # Subscribe to messages with short timeout
+            sm = messaging.SubMaster(['navStateSP', 'liveLocationKalman'], poll='navStateSP')
+            sm.update(timeout=100)  # 100ms timeout
+
+            # Read params
+            nav_active = self.params.get_bool("NavigationActive")
+            dest_json = self.params.get("NavigationDestination")
+
+            # Parse destination if available
+            destination = None
+            if dest_json:
+                try:
+                    destination = json.loads(dest_json)
+                except:
+                    pass
+
+            # Build status response
+            status = {
+                'active': nav_active,
+                'gps_valid': False,
+                'gps_lat': None,
+                'gps_lon': None,
+                'dest_name': None,
+                'dest_lat': None,
+                'dest_lon': None,
+                'distance_remaining': None,
+                'time_remaining': None,
+                'current_segment': None,
+                'total_segments': None,
+                'next_maneuver_valid': False,
+                'next_maneuver_type': None,
+                'next_maneuver_direction': None,
+                'next_maneuver_distance': None,
+                'next_maneuver_description': None,
+                'turn_desire_active': False,
+                'turn_desire_direction': None,
+                'target_speed_valid': False,
+                'target_speed': None,
+            }
+
+            # Get GPS position
+            if sm.alive['liveLocationKalman']:
+                location = sm['liveLocationKalman']
+                if location.status == log.LiveLocationKalman.Status.valid and location.positionGeodetic.valid:
+                    status['gps_valid'] = True
+                    status['gps_lat'] = location.positionGeodetic.value[0]
+                    status['gps_lon'] = location.positionGeodetic.value[1]
+
+            # Get destination info from params
+            if destination:
+                status['dest_name'] = destination.get('name')
+                status['dest_lat'] = destination.get('latitude')
+                status['dest_lon'] = destination.get('longitude')
+
+            # Get navigation state if available
+            if sm.alive['navStateSP']:
+                nav = sm['navStateSP']
+                if nav.active:
+                    status['distance_remaining'] = nav.distanceRemaining
+                    status['time_remaining'] = nav.timeRemaining
+                    status['current_segment'] = nav.currentSegmentIndex
+                    status['total_segments'] = nav.totalSegments
+
+                    if nav.nextManeuverValid:
+                        status['next_maneuver_valid'] = True
+                        status['next_maneuver_type'] = nav.nextManeuverType
+                        status['next_maneuver_direction'] = nav.nextManeuverDirection
+                        status['next_maneuver_distance'] = nav.nextManeuverDistance
+                        status['next_maneuver_description'] = nav.nextManeuverDescription
+
+                    status['turn_desire_active'] = nav.shouldSendTurnDesire
+                    status['turn_desire_direction'] = nav.turnDesireDirection
+
+                    if nav.targetSpeedValid:
+                        status['target_speed_valid'] = True
+                        status['target_speed'] = nav.targetSpeed
+
+            self._send_json_response(status)
+
+        except Exception as e:
+            cloudlog.exception(f"navd: Error getting nav status: {e}")
+            self._send_json_response({'error': str(e)})
 
     def _send_json_response(self, data):
         """Send JSON response."""

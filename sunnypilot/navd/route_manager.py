@@ -562,15 +562,17 @@ class RouteManager:
             cloudlog.info(f"navd: 🎯 ARRIVED - Direct distance to destination: {direct_distance:.1f}m")
             return True
 
-        # Criterion 3: Last maneuver is "arrive" type and we've passed it
+        # Criterion 3: Last maneuver is "arrive" type and we've reached or passed it
         if self.maneuvers:
             last_maneuver = self.maneuvers[-1]
             if last_maneuver.type == "arrive":
-                # Check if we've passed the arrive maneuver
+                # Check if we've reached or passed the arrive maneuver
                 distance_to_arrive = last_maneuver.distance_from_start - self.distance_along_route
-                if distance_to_arrive < -ARRIVAL_THRESHOLD:  # Negative means we've passed it
+                # Trigger when we're at or past the arrival point (distance_to_arrive <= threshold)
+                # This handles both arriving at the point and passing it
+                if distance_to_arrive <= ARRIVAL_THRESHOLD:
                     self.has_arrived_flag = True
-                    cloudlog.info(f"navd: 🎯 ARRIVED - Passed arrival maneuver")
+                    cloudlog.info(f"navd: 🎯 ARRIVED - Reached/passed arrival maneuver (distance: {abs(distance_to_arrive):.1f}m)")
                     return True
 
         return False
