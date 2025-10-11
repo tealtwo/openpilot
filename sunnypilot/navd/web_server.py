@@ -669,9 +669,9 @@ class NavigationWebServer(BaseHTTPRequestHandler):
     def _handle_nav_status(self):
         """Return current navigation status as JSON."""
         try:
-            # Subscribe to messages with short timeout
+            # Subscribe to messages with longer timeout to ensure we get fresh data
             sm = messaging.SubMaster(['navStateSP', 'liveLocationKalman'], poll='navStateSP')
-            sm.update(timeout=100)  # 100ms timeout
+            sm.update(timeout=1000)  # 1 second timeout - wait for fresh navStateSP message
 
             # Read params
             nav_active = self.params.get_bool("NavigationActive")
@@ -723,28 +723,28 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                 status['dest_lat'] = destination.get('latitude')
                 status['dest_lon'] = destination.get('longitude')
 
-            # Get navigation state if available
+            # Get navigation state if available - use 'alive' since 'valid' might be too strict
             if sm.alive['navStateSP']:
                 nav = sm['navStateSP']
-                if nav.active:
-                    status['distance_remaining'] = nav.distanceRemaining
-                    status['time_remaining'] = nav.timeRemaining
-                    status['current_segment'] = nav.currentSegmentIndex
-                    status['total_segments'] = nav.totalSegments
+                # Populate navigation data regardless of nav.active (might be calculating route)
+                status['distance_remaining'] = nav.distanceRemaining if nav.distanceRemaining > 0 else None
+                status['time_remaining'] = nav.timeRemaining if nav.timeRemaining > 0 else None
+                status['current_segment'] = nav.currentSegmentIndex if nav.active else None
+                status['total_segments'] = nav.totalSegments if nav.active else None
 
-                    if nav.nextManeuverValid:
-                        status['next_maneuver_valid'] = True
-                        status['next_maneuver_type'] = nav.nextManeuverType.raw  # Get integer value from enum
-                        status['next_maneuver_direction'] = nav.nextManeuverDirection.raw  # Get integer value from enum
-                        status['next_maneuver_distance'] = nav.nextManeuverDistance
-                        status['next_maneuver_description'] = nav.nextManeuverDescription
+                if nav.nextManeuverValid:
+                    status['next_maneuver_valid'] = True
+                    status['next_maneuver_type'] = nav.nextManeuverType.raw  # Get integer value from enum
+                    status['next_maneuver_direction'] = nav.nextManeuverDirection.raw  # Get integer value from enum
+                    status['next_maneuver_distance'] = nav.nextManeuverDistance
+                    status['next_maneuver_description'] = nav.nextManeuverDescription
 
-                    status['turn_desire_active'] = nav.shouldSendTurnDesire
-                    status['turn_desire_direction'] = nav.turnDesireDirection.raw if nav.turnDesireDirection is not None else None
+                status['turn_desire_active'] = nav.shouldSendTurnDesire
+                status['turn_desire_direction'] = nav.turnDesireDirection.raw if nav.shouldSendTurnDesire else None
 
-                    if nav.targetSpeedValid:
-                        status['target_speed_valid'] = True
-                        status['target_speed'] = nav.targetSpeed
+                if nav.targetSpeedValid:
+                    status['target_speed_valid'] = True
+                    status['target_speed'] = nav.targetSpeed
 
             self._send_json_response(status)
 
