@@ -12,8 +12,8 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance
 
 # Thresholds for turn desire triggering
-TURN_DESIRE_START_DISTANCE = 50.0  # meters - start sending turn desires
-TURN_DESIRE_END_DISTANCE = 10.0     # meters - stop sending turn desires after passing
+TURN_DESIRE_START_DISTANCE = 100.0  # meters - start sending turn desires
+TURN_DESIRE_END_DISTANCE = 20.0     # meters - stop sending turn desires after passing
 MANEUVER_COMPLETION_THRESHOLD = 30.0  # meters - consider maneuver completed
 
 # Turn sharpness thresholds (degrees) for speed recommendations
