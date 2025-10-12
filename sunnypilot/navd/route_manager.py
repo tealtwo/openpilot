@@ -320,16 +320,20 @@ class RouteManager:
                 self.route_alternatives.append(alternative)
 
             # If we got alternatives, select the first one by default
+            # Or try to preserve the previously selected route index if valid
             if self.route_alternatives:
-                self.selected_route_index = 0
-                selected = self.route_alternatives[0]
+                # Try to preserve user's route selection if within bounds
+                if not (0 <= self.selected_route_index < len(self.route_alternatives)):
+                    self.selected_route_index = 0  # Fallback to first route if invalid
+
+                selected = self.route_alternatives[self.selected_route_index]
                 self.route_geometry = selected.geometry
                 self.maneuvers = selected.maneuvers
                 self.distance_remaining = selected.distance
                 self.time_remaining = selected.duration
 
                 cloudlog.info(f"navd: Mapbox found {len(self.route_alternatives)} routes. "
-                             f"Selected route: {selected.distance:.0f}m, {selected.duration:.0f}s, "
+                             f"Selected route {self.selected_route_index + 1}: {selected.distance:.0f}m, {selected.duration:.0f}s, "
                              f"{len(selected.maneuvers)} maneuvers")
                 return True
 
