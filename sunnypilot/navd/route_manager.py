@@ -27,6 +27,7 @@ SPEED_SHARP_TURN = 8.0      # ~18 mph
 SPEED_MODERATE_TURN = 12.0  # ~27 mph
 SPEED_GENTLE_TURN = 16.0    # ~36 mph
 SPEED_EXIT = 15.0           # ~34 mph for highway exits
+SPEED_ROUNDABOUT = 10.0     # ~22 mph for roundabouts
 
 # Auto-rerouting thresholds
 OFF_ROUTE_DISTANCE_THRESHOLD = 75.0  # meters - trigger reroute if this far from route
@@ -51,6 +52,8 @@ class Maneuver:
         """Calculate recommended speed for this maneuver."""
         if self.type == "exit":
             return SPEED_EXIT
+        elif self.type == "roundabout":
+            return SPEED_ROUNDABOUT
         elif self.type == "turn" and self.angle is not None:
             if abs(self.angle) < SHARP_TURN_ANGLE:
                 return SPEED_SHARP_TURN
@@ -154,6 +157,10 @@ class RouteManager:
         # Route alternatives
         self.route_alternatives: List[RouteAlternative] = []
         self.selected_route_index = 0
+
+        # Speed influence state tracking (for logging)
+        self.last_speed_influence_active = False
+        self.last_target_speed = 0.0
 
         # OSRM demo server (fallback only)
         self.osrm_server = "http://router.project-osrm.org"
@@ -547,24 +554,122 @@ class RouteManager:
 
         return should_send, direction
 
-    def get_target_speed(self) -> Optional[float]:
+    def get_speed_influence_distance(self, v_current: float, maneuver: Maneuver) -> float:
+        """
+        Calculate dynamic distance at which to start influencing e2e with turn speed.
+
+        Args:
+            v_current: Current vehicle speed in m/s
+            maneuver: The upcoming maneuver
+
+        Returns:
+            Distance in meters at which speed influence should begin
+        """
+        # Get target speed for this maneuver
+        v_target = maneuver.get_recommended_speed()
+        if v_target is None:
+            return 0.0  # No speed recommendation, no influence
+
+        # Calculate speed differential
+        speed_diff = max(0.0, v_current - v_target)
+
+        # Determine multiplier and base distance based on turn severity
+        if maneuver.type == "exit":
+            # Highway exits need more distance
+            multiplier = 2.5
+            base_distance = 45.0
+        elif maneuver.type == "roundabout":
+            # Roundabouts need moderate braking distance
+            multiplier = 2.5
+            base_distance = 40.0
+        elif maneuver.type == "turn" and maneuver.angle is not None:
+            # Use turn angle to determine severity
+            abs_angle = abs(maneuver.angle)
+            if abs_angle < SHARP_TURN_ANGLE:  # Sharp turn (< 60°)
+                multiplier = 3.0
+                base_distance = 50.0
+            elif abs_angle < MODERATE_TURN_ANGLE:  # Moderate turn (60-100°)
+                multiplier = 2.5
+                base_distance = 40.0
+            elif abs_angle < GENTLE_TURN_ANGLE:  # Gentle turn (100-140°)
+                multiplier = 2.0
+                base_distance = 30.0
+            else:  # Very gentle (> 140°)
+                multiplier = 1.5
+                base_distance = 25.0
+        else:
+            # Default for other maneuver types
+            multiplier = 2.0
+            base_distance = 35.0
+
+        # Calculate influence distance: base + (speed_diff × multiplier)
+        influence_distance = base_distance + (speed_diff * multiplier)
+
+        # Clamp to reasonable range
+        MIN_INFLUENCE_DISTANCE = 30.0  # Minimum safety distance
+        MAX_INFLUENCE_DISTANCE = 150.0  # Maximum to avoid braking too early
+
+        return max(MIN_INFLUENCE_DISTANCE, min(MAX_INFLUENCE_DISTANCE, influence_distance))
+
+    def get_target_speed(self, v_current: float = 0.0) -> Optional[float]:
         """
         Get target speed for upcoming maneuver.
+
+        Args:
+            v_current: Current vehicle speed in m/s (for dynamic distance calculation)
 
         Returns:
             Target speed in m/s, or None if no speed recommendation
         """
         maneuver = self.get_next_maneuver()
         if maneuver is None:
+            # Clear speed influence state if no maneuver
+            if self.last_speed_influence_active:
+                self.last_speed_influence_active = False
+                cloudlog.info("navd: ✓ Speed influence cleared (no maneuver)")
             return None
 
         distance_to_maneuver = self.get_distance_to_next_maneuver()
 
-        # Only provide speed recommendation when approaching maneuver
-        if 0 <= distance_to_maneuver <= 300.0:  # 300m lookahead
-            return maneuver.get_recommended_speed()
+        # Only influence speed for maneuver types that have speed recommendations
+        # "turn", "exit", "roundabout" have recommendations; "merge", "continue_", "arrive" do not
+        if maneuver.type not in ["turn", "exit", "roundabout"]:
+            if self.last_speed_influence_active:
+                self.last_speed_influence_active = False
+                cloudlog.info(f"navd: ✓ Speed influence cleared (maneuver type: {maneuver.type})")
+            return None
 
-        return None
+        # Get target speed for this maneuver (may be None if turn has no angle)
+        target_speed = maneuver.get_recommended_speed()
+        if target_speed is None:
+            if self.last_speed_influence_active:
+                self.last_speed_influence_active = False
+                cloudlog.info("navd: ✓ Speed influence cleared (no speed recommendation)")
+            return None
+
+        # Calculate dynamic influence distance based on current speed
+        if v_current > 0:
+            influence_distance = self.get_speed_influence_distance(v_current, maneuver)
+        else:
+            # Fallback if v_current not provided (backwards compatibility)
+            influence_distance = 100.0
+
+        # Only provide speed recommendation when within influence zone
+        if 0 <= distance_to_maneuver <= influence_distance:
+            # Log when speed influence state changes
+            if not self.last_speed_influence_active or target_speed != self.last_target_speed:
+                cloudlog.info(f"navd: 🎯 SPEED INFLUENCE ACTIVE - Target: {target_speed:.1f} m/s ({target_speed * 2.237:.0f} mph) | "
+                             f"Distance: {distance_to_maneuver:.0f}m | Influence zone: {influence_distance:.0f}m | "
+                             f"Maneuver: {maneuver.type} - {maneuver.description}")
+                self.last_speed_influence_active = True
+                self.last_target_speed = target_speed
+            return target_speed
+        else:
+            # Outside influence zone - clear speed influence
+            if self.last_speed_influence_active:
+                self.last_speed_influence_active = False
+                cloudlog.info("navd: ✓ Speed influence cleared (outside influence zone)")
+            return None
 
     def _check_and_reroute(self, current_pos: Coordinate) -> None:
         """

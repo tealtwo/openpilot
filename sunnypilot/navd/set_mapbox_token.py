@@ -8,7 +8,7 @@ Usage:
 Or run interactively:
     python set_mapbox_token.py
 """
-
+# Why tf does this file exist, just set it in navd.py
 import sys
 from openpilot.common.params import Params
 

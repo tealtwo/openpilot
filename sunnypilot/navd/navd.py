@@ -42,6 +42,7 @@ class NavigationDaemon:
         self.current_position: Coordinate | None = None
         self.last_bearing: float | None = None
         self.localizer_valid = False
+        self.v_ego: float = 0.0  # Current vehicle speed in m/s
 
         # Destination tracking
         self.last_destination_json = ""
@@ -169,6 +170,13 @@ class NavigationDaemon:
                 location.positionGeodetic.value[1]
             )
 
+            # Extract vehicle speed (velocity magnitude from NED frame)
+            if location.velocityCalibrated.valid:
+                v_ned = location.velocityCalibrated.value
+                self.v_ego = math.sqrt(v_ned[0]**2 + v_ned[1]**2 + v_ned[2]**2)
+            else:
+                self.v_ego = 0.0
+
             # Update route manager with current position
             if self.route_manager.active and self.current_position:
                 self.route_manager.update_position(self.current_position)
@@ -287,8 +295,8 @@ class NavigationDaemon:
             nav_state.shouldSendTurnDesire = should_send
             nav_state.turnDesireDirection = self._map_direction(direction)
 
-            # E2e Speed guidance
-            target_speed = self.route_manager.get_target_speed()
+            # E2e Speed guidance (dynamic distance based on current speed)
+            target_speed = self.route_manager.get_target_speed(self.v_ego)
             if target_speed is not None:
                 nav_state.targetSpeed = target_speed
                 nav_state.targetSpeedValid = True
