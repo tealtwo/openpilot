@@ -182,6 +182,159 @@ HTML_TEMPLATE = """
             color: #666;
             font-weight: bold;
         }
+        /* Routes Tab Styles */
+        .routes-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+        .routes-section-title {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        /* Preferences Styles */
+        .preferences-container {
+            margin-bottom: 15px;
+        }
+        .preference-item {
+            margin-bottom: 12px;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 16px;
+            color: #333;
+        }
+        .preference-checkbox {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .checkbox-text {
+            user-select: none;
+        }
+        /* Route Cards */
+        .routes-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+            font-size: 16px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #ddd;
+        }
+        .routes-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .route-card {
+            background-color: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .route-card:hover {
+            border-color: #4CAF50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .route-card.selected {
+            border: 3px solid #4CAF50;
+            background-color: #f1f8f4;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+        .route-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .route-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .route-selected-badge {
+            background-color: #4CAF50;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .route-stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        .route-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .route-stat-label {
+            font-weight: 500;
+        }
+        .route-stat-value {
+            font-weight: bold;
+            color: #333;
+        }
+        .route-badges {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            display: inline-block;
+        }
+        .badge-highway {
+            background-color: #2196F3;
+        }
+        .badge-toll {
+            background-color: #FF9800;
+        }
+        .route-actions {
+            margin-top: 12px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .select-route-btn {
+            background-color: #2196F3;
+            color: white;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .select-route-btn:hover {
+            background-color: #1976D2;
+        }
+        .recalculate-btn {
+            background-color: #2196F3;
+        }
+        .recalculate-btn:hover {
+            background-color: #1976D2;
+        }
     </style>
 </head>
 <body>
@@ -191,6 +344,7 @@ HTML_TEMPLATE = """
         <div class="tab-buttons">
             <button class="tab-button active" onclick="switchTab('address')">Address Search</button>
             <button class="tab-button" onclick="switchTab('coords')">Coordinates</button>
+            <button class="tab-button" onclick="switchTab('routes')">Routes</button>
             <button class="tab-button" onclick="switchTab('debug')">Debug</button>
         </div>
 
@@ -225,6 +379,51 @@ HTML_TEMPLATE = """
                 <button type="submit">Navigate</button>
                 <button type="button" class="cancel-btn" onclick="cancelNavigation()">Cancel Navigation</button>
             </form>
+        </div>
+
+        <!-- Routes Tab -->
+        <div id="routes-tab" class="tab-content">
+            <div class="debug-refresh">🔄 Auto-refreshing every 2s</div>
+
+            <!-- Routing Preferences Section -->
+            <div class="routes-section">
+                <h3 class="routes-section-title">Routing Preferences</h3>
+                <div class="preferences-container">
+                    <div class="preference-item">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="pref-avoid-tolls" class="preference-checkbox">
+                            <span class="checkbox-text">💰 Avoid Toll Roads</span>
+                        </label>
+                    </div>
+                    <div class="preference-item">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="pref-avoid-highways" class="preference-checkbox">
+                            <span class="checkbox-text">🛣️ Avoid Highways/Motorways</span>
+                        </label>
+                    </div>
+                    <div class="preference-item">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="pref-avoid-ferries" class="preference-checkbox">
+                            <span class="checkbox-text">⛴️ Avoid Ferries</span>
+                        </label>
+                    </div>
+                </div>
+                <button type="button" onclick="savePreferences()">Apply Preferences</button>
+            </div>
+
+            <!-- Route Alternatives Section -->
+            <div class="routes-section">
+                <h3 class="routes-section-title">Available Routes</h3>
+                <div id="routes-empty" class="routes-empty">
+                    ℹ️ No routes calculated yet. Set a destination first.
+                </div>
+                <div id="routes-container" class="routes-container" style="display: none;">
+                    <!-- Route cards will be dynamically inserted here -->
+                </div>
+                <button type="button" class="recalculate-btn" onclick="recalculateRoutes()" style="margin-top: 15px;">
+                    Recalculate Routes
+                </button>
+            </div>
         </div>
 
         <!-- Debug Tab -->
@@ -343,10 +542,14 @@ HTML_TEMPLATE = """
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
 
-            // Stop debug polling if switching away from debug tab
+            // Stop any polling intervals
             if (debugInterval) {
                 clearInterval(debugInterval);
                 debugInterval = null;
+            }
+            if (routesInterval) {
+                clearInterval(routesInterval);
+                routesInterval = null;
             }
 
             // Show selected tab
@@ -356,9 +559,17 @@ HTML_TEMPLATE = """
             } else if (tab === 'coords') {
                 document.getElementById('coords-tab').classList.add('active');
                 document.querySelectorAll('.tab-button')[1].classList.add('active');
+            } else if (tab === 'routes') {
+                document.getElementById('routes-tab').classList.add('active');
+                document.querySelectorAll('.tab-button')[2].classList.add('active');
+                // Load preferences and routes immediately
+                loadPreferences();
+                loadRouteAlternatives();
+                // Start routes polling
+                routesInterval = setInterval(loadRouteAlternatives, 2000); // Update every 2 seconds
             } else if (tab === 'debug') {
                 document.getElementById('debug-tab').classList.add('active');
-                document.querySelectorAll('.tab-button')[2].classList.add('active');
+                document.querySelectorAll('.tab-button')[3].classList.add('active');
                 // Start debug polling
                 updateDebugPanel(); // Immediate update
                 debugInterval = setInterval(updateDebugPanel, 1000); // Update every 1 second
@@ -521,6 +732,191 @@ HTML_TEMPLATE = """
                 }
             } catch (error) {
                 showStatus('Failed to cancel navigation: ' + error, false);
+            }
+        }
+
+        // Routes Tab Functions
+        let routesInterval = null;
+
+        async function loadPreferences() {
+            try {
+                const response = await fetch('/preferences');
+                const result = await response.json();
+
+                if (result.success) {
+                    const prefs = result.preferences;
+                    document.getElementById('pref-avoid-tolls').checked = prefs.avoid_tolls || false;
+                    document.getElementById('pref-avoid-highways').checked = prefs.avoid_highways || false;
+                    document.getElementById('pref-avoid-ferries').checked = prefs.avoid_ferries || false;
+                }
+            } catch (error) {
+                console.error('Failed to load preferences:', error);
+            }
+        }
+
+        async function savePreferences() {
+            try {
+                const preferences = {
+                    avoid_tolls: document.getElementById('pref-avoid-tolls').checked,
+                    avoid_highways: document.getElementById('pref-avoid-highways').checked,
+                    avoid_ferries: document.getElementById('pref-avoid-ferries').checked
+                };
+
+                showStatus('Applying preferences...', true);
+
+                const response = await fetch('/preferences', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(preferences)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus('Preferences applied! Recalculating routes...', true);
+                    // Wait a moment for route recalculation, then refresh
+                    setTimeout(loadRouteAlternatives, 1500);
+                } else {
+                    showStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                showStatus('Failed to save preferences: ' + error, false);
+            }
+        }
+
+        async function loadRouteAlternatives() {
+            try {
+                const response = await fetch('/route_alternatives');
+                const result = await response.json();
+
+                if (result.success && result.alternatives && result.alternatives.length > 0) {
+                    // Hide empty state, show container
+                    document.getElementById('routes-empty').style.display = 'none';
+                    document.getElementById('routes-container').style.display = 'flex';
+
+                    // Render route cards
+                    const container = document.getElementById('routes-container');
+                    container.innerHTML = result.alternatives.map(route => renderRouteCard(route)).join('');
+                } else {
+                    // Show empty state, hide container
+                    document.getElementById('routes-empty').style.display = 'block';
+                    document.getElementById('routes-container').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to load route alternatives:', error);
+            }
+        }
+
+        function escapeHtml(unsafe) {
+            if (unsafe == null) return '';
+            return String(unsafe)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function renderRouteCard(route) {
+            // Validate route object
+            if (!route || typeof route.index !== 'number') {
+                console.error('Invalid route object:', route);
+                return '';
+            }
+
+            // Extract and validate route data with fallbacks
+            const isSelected = route.is_selected || false;
+            const routeIndex = route.index;
+            const routeName = escapeHtml(route.summary) || `Route ${routeIndex + 1}`;
+            const distance = route.distance || 0;
+            const distanceMi = route.distance_mi || 0;
+            const durationMin = route.duration_min || 0;
+            const hasHighways = route.has_highways || false;
+            const hasTolls = route.has_tolls || false;
+
+            const cardClass = isSelected ? 'route-card selected' : 'route-card';
+
+            const selectedBadge = isSelected
+                ? '<span class="route-selected-badge">✓ Selected</span>'
+                : '';
+
+            const badges = [];
+            if (hasHighways) {
+                badges.push('<span class="badge badge-highway">🛣️ Highway</span>');
+            }
+            if (hasTolls) {
+                badges.push('<span class="badge badge-toll">💰 Toll</span>');
+            }
+            const badgesHtml = badges.length > 0
+                ? '<div class="route-badges">' + badges.join('') + '</div>'
+                : '';
+
+            const selectButton = !isSelected
+                ? `<div class="route-actions"><button class="select-route-btn" onclick="selectRoute(${routeIndex})">Select Route</button></div>`
+                : '';
+
+            return `
+                <div class="${cardClass}">
+                    <div class="route-header">
+                        <div class="route-name">${routeName}</div>
+                        ${selectedBadge}
+                    </div>
+                    <div class="route-stats">
+                        <div class="route-stat">
+                            <span class="route-stat-label">Distance:</span>
+                            <span class="route-stat-value">${distanceMi.toFixed(2)} mi (${(distance / 1000).toFixed(1)} km)</span>
+                        </div>
+                        <div class="route-stat">
+                            <span class="route-stat-label">Time:</span>
+                            <span class="route-stat-value">${Math.floor(durationMin)} min</span>
+                        </div>
+                    </div>
+                    ${badgesHtml}
+                    ${selectButton}
+                </div>
+            `;
+        }
+
+        async function selectRoute(routeIndex) {
+            try {
+                showStatus('Selecting route...', true);
+
+                const response = await fetch('/select_route', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({route_index: routeIndex})
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus('Route selected!', true);
+                    // Refresh route display to show new selection
+                    setTimeout(loadRouteAlternatives, 500);
+                } else {
+                    showStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                showStatus('Failed to select route: ' + error, false);
+            }
+        }
+
+        async function recalculateRoutes() {
+            try {
+                showStatus('Recalculating routes...', true);
+
+                const response = await fetch('/calculate_routes', {method: 'POST'});
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus('Routes recalculated!', true);
+                    // Wait for backend to process, then refresh
+                    setTimeout(loadRouteAlternatives, 2000);
+                } else {
+                    showStatus('Error: ' + result.error, false);
+                }
+            } catch (error) {
+                showStatus('Failed to recalculate routes: ' + error, false);
             }
         }
     </script>
