@@ -453,6 +453,10 @@ struct NavStateSP @0xcb9fd56c7057593a {
   destinationLongitude @16 :Float64;
   destinationName @17 :Text;
 
+  # Lane positioning guidance for exits/turns
+  shouldSendLanePositioning @18 :Bool;      # Whether to send lane positioning desires (keepLeft/keepRight)
+  lanePositioningDirection @19 :TurnDirection;  # Direction for lane positioning
+
   enum ManeuverType {
     none @0;
     turn @1;              # Regular turn at intersection

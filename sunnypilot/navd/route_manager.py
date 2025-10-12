@@ -9,12 +9,16 @@ from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
 
 from openpilot.common.swaglog import cloudlog
-from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance
+from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance, LanePosition
 
 # Thresholds for turn desire triggering
 TURN_DESIRE_START_DISTANCE = 100.0  # meters - start sending turn desires
 TURN_DESIRE_END_DISTANCE = 20.0     # meters - stop sending turn desires after passing
 MANEUVER_COMPLETION_THRESHOLD = 30.0  # meters - consider maneuver completed
+
+# Thresholds for lane positioning guidance
+LANE_POSITIONING_START_DISTANCE = 1600.0  # meters (~1 mile) - start suggesting lane changes
+LANE_POSITIONING_END_DISTANCE = 100.0     # meters - stop lane positioning when turn desires take over
 
 # Turn sharpness thresholds (degrees) for speed recommendations
 SHARP_TURN_ANGLE = 60.0    # < 60 degrees is sharp
@@ -161,6 +165,10 @@ class RouteManager:
         # Speed influence state tracking (for logging)
         self.last_speed_influence_active = False
         self.last_target_speed = 0.0
+
+        # Lane positioning state tracking (for logging)
+        self.last_lane_positioning_active = False
+        self.last_lane_positioning_direction = "none"
 
         # OSRM demo server (fallback only)
         self.osrm_server = "http://router.project-osrm.org"
@@ -557,6 +565,87 @@ class RouteManager:
 
             self.last_turn_desire_active = should_send
             self.last_turn_direction = direction
+
+        return should_send, direction
+
+    def should_send_lane_positioning_desire(self, current_lane_position: LanePosition) -> Tuple[bool, str]:
+        """
+        Determine if we should send lane positioning desires (keepLeft/keepRight) for upcoming exits/turns.
+
+        This provides early guidance (0.5-1 mile) to position the vehicle in the correct lane
+        for upcoming exits or turns.
+
+        Args:
+            current_lane_position: Current detected lane position (from modelV2)
+
+        Returns:
+            (should_send, direction) tuple where:
+                should_send: True if lane positioning should be sent
+                direction: "left", "right", or "none"
+        """
+        maneuver = self.get_next_maneuver()
+        if maneuver is None:
+            if self.last_lane_positioning_active:
+                self.last_lane_positioning_active = False
+                cloudlog.info("navd: ✓ Lane positioning cleared (no maneuver)")
+            return False, "none"
+
+        distance_to_maneuver = self.get_distance_to_next_maneuver()
+
+        # Only provide lane positioning for exits and turns (not merges, continues, arrivals, or roundabouts)
+        if maneuver.type not in ["exit", "turn"]:
+            if self.last_lane_positioning_active:
+                self.last_lane_positioning_active = False
+                cloudlog.info(f"navd: ✓ Lane positioning cleared (maneuver type: {maneuver.type})")
+            return False, "none"
+
+        # Don't send lane positioning for straight maneuvers
+        if maneuver.direction == "straight" or maneuver.direction == "none":
+            if self.last_lane_positioning_active:
+                self.last_lane_positioning_active = False
+                cloudlog.info("navd: ✓ Lane positioning cleared (straight maneuver)")
+            return False, "none"
+
+        # Lane positioning is active in the distance zone BEFORE turn desires take over
+        if not (LANE_POSITIONING_END_DISTANCE < distance_to_maneuver <= LANE_POSITIONING_START_DISTANCE):
+            if self.last_lane_positioning_active:
+                self.last_lane_positioning_active = False
+                cloudlog.info("navd: ✓ Lane positioning cleared (outside distance zone)")
+            return False, "none"
+
+        # Can't provide guidance if we don't know current lane position
+        if current_lane_position == LanePosition.UNKNOWN:
+            if self.last_lane_positioning_active:
+                self.last_lane_positioning_active = False
+                cloudlog.info("navd: ✓ Lane positioning cleared (unknown lane position)")
+            return False, "none"
+
+        # Determine if we need to change lanes based on maneuver direction and current position
+        should_send = False
+        direction = "none"
+
+        if maneuver.direction == "left":
+            # Left exit/turn - suggest moving left if not already in leftmost lane
+            if current_lane_position in [LanePosition.MIDDLE_LANE, LanePosition.RIGHT_LANE]:
+                should_send = True
+                direction = "left"
+        elif maneuver.direction == "right":
+            # Right exit/turn - suggest moving right if not already in rightmost lane
+            if current_lane_position in [LanePosition.MIDDLE_LANE, LanePosition.LEFT_LANE]:
+                should_send = True
+                direction = "right"
+
+        # Log when lane positioning state changes
+        if should_send != self.last_lane_positioning_active or direction != self.last_lane_positioning_direction:
+            if should_send:
+                cloudlog.info(f"navd: 🛣️ LANE POSITIONING ACTIVE - Suggest: {direction.upper()} | "
+                             f"Current lane: {current_lane_position.value} | Distance: {distance_to_maneuver:.0f}m | "
+                             f"Maneuver: {maneuver.type} {maneuver.direction} - {maneuver.description}")
+            else:
+                cloudlog.info("navd: ✓ Lane positioning cleared")
+
+            self.last_lane_positioning_active = should_send
+            self.last_lane_positioning_direction = direction
 
         return should_send, direction
 

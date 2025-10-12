@@ -11,6 +11,7 @@ import requests
 from cereal import messaging, log
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.sunnypilot.navd.helpers import detect_lane_position, LanePosition
 
 # ============================================================================
 # MAPBOX API TOKEN - Set your token here for quick setup
@@ -199,29 +200,6 @@ HTML_TEMPLATE = """
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        /* Preferences Styles */
-        .preferences-container {
-            margin-bottom: 15px;
-        }
-        .preference-item {
-            margin-bottom: 12px;
-        }
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            font-size: 16px;
-            color: #333;
-        }
-        .preference-checkbox {
-            width: 20px;
-            height: 20px;
-            margin-right: 10px;
-            cursor: pointer;
-        }
-        .checkbox-text {
-            user-select: none;
-        }
         /* Route Cards */
         .routes-empty {
             text-align: center;
@@ -386,32 +364,6 @@ HTML_TEMPLATE = """
         <div id="routes-tab" class="tab-content">
             <div class="debug-refresh">🔄 Auto-refreshing every 2s</div>
 
-            <!-- Routing Preferences Section -->
-            <div class="routes-section">
-                <h3 class="routes-section-title">Routing Preferences</h3>
-                <div class="preferences-container">
-                    <div class="preference-item">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="pref-avoid-tolls" class="preference-checkbox">
-                            <span class="checkbox-text">💰 Avoid Toll Roads</span>
-                        </label>
-                    </div>
-                    <div class="preference-item">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="pref-avoid-highways" class="preference-checkbox">
-                            <span class="checkbox-text">🛣️ Avoid Highways/Motorways</span>
-                        </label>
-                    </div>
-                    <div class="preference-item">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="pref-avoid-ferries" class="preference-checkbox">
-                            <span class="checkbox-text">⛴️ Avoid Ferries</span>
-                        </label>
-                    </div>
-                </div>
-                <button type="button" onclick="savePreferences()">Apply Preferences</button>
-            </div>
-
             <!-- Route Alternatives Section -->
             <div class="routes-section">
                 <h3 class="routes-section-title">Available Routes</h3>
@@ -520,6 +472,34 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="debug-section">
+                <div class="debug-header">LANE POSITION</div>
+                <div class="debug-row">
+                    <span class="debug-label">Current Lane:</span>
+                    <span class="debug-value" id="debug-lane-position">UNKNOWN</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Left Line Visible:</span>
+                    <span class="debug-value" id="debug-lane-left">No</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Right Line Visible:</span>
+                    <span class="debug-value" id="debug-lane-right">No</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <div class="debug-header">LANE POSITIONING</div>
+                <div class="debug-row">
+                    <span class="debug-label">Active:</span>
+                    <span class="debug-value" id="debug-lane-pos-active">No</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Direction:</span>
+                    <span class="debug-value" id="debug-lane-pos-dir">None</span>
+                </div>
+            </div>
+
+            <div class="debug-section">
                 <div class="debug-header">SPEED TARGET</div>
                 <div class="debug-row">
                     <span class="debug-label">Target:</span>
@@ -563,8 +543,7 @@ HTML_TEMPLATE = """
             } else if (tab === 'routes') {
                 document.getElementById('routes-tab').classList.add('active');
                 document.querySelectorAll('.tab-button')[2].classList.add('active');
-                // Load preferences and routes immediately
-                loadPreferences();
+                // Load routes immediately
                 loadRouteAlternatives();
                 // Start routes polling
                 routesInterval = setInterval(loadRouteAlternatives, 2000); // Update every 2 seconds
@@ -640,6 +619,18 @@ HTML_TEMPLATE = """
                 document.getElementById('debug-turn-active').textContent = status.turn_desire_active ? `Yes - ${turnDir.toUpperCase()}` : 'No';
                 document.getElementById('debug-turn-active').style.color = status.turn_desire_active ? '#f44336' : '#999';
                 document.getElementById('debug-turn-dir').textContent = turnDir;
+
+                // Update LANE POSITION
+                document.getElementById('debug-lane-position').textContent = status.lane_position || 'UNKNOWN';
+                document.getElementById('debug-lane-left').textContent = status.lane_line_left_visible ? 'Yes' : 'No';
+                document.getElementById('debug-lane-right').textContent = status.lane_line_right_visible ? 'Yes' : 'No';
+
+                // Update LANE POSITIONING
+                const lanePosDirs = ['none', 'left', 'right'];
+                const lanePosDir = (status.lane_positioning_direction != null) ? (lanePosDirs[status.lane_positioning_direction] || 'unknown') : 'none';
+                document.getElementById('debug-lane-pos-active').textContent = status.lane_positioning_active ? `Yes - ${lanePosDir.toUpperCase()}` : 'No';
+                document.getElementById('debug-lane-pos-active').style.color = status.lane_positioning_active ? '#2196F3' : '#999';
+                document.getElementById('debug-lane-pos-dir').textContent = lanePosDir;
 
                 // Update SPEED TARGET
                 document.getElementById('debug-speed-target').textContent =
@@ -738,52 +729,6 @@ HTML_TEMPLATE = """
 
         // Routes Tab Functions
         let routesInterval = null;
-
-        async function loadPreferences() {
-            try {
-                const response = await fetch('/preferences');
-                const result = await response.json();
-
-                if (result.success) {
-                    const prefs = result.preferences;
-                    document.getElementById('pref-avoid-tolls').checked = prefs.avoid_tolls || false;
-                    document.getElementById('pref-avoid-highways').checked = prefs.avoid_highways || false;
-                    document.getElementById('pref-avoid-ferries').checked = prefs.avoid_ferries || false;
-                }
-            } catch (error) {
-                console.error('Failed to load preferences:', error);
-            }
-        }
-
-        async function savePreferences() {
-            try {
-                const preferences = {
-                    avoid_tolls: document.getElementById('pref-avoid-tolls').checked,
-                    avoid_highways: document.getElementById('pref-avoid-highways').checked,
-                    avoid_ferries: document.getElementById('pref-avoid-ferries').checked
-                };
-
-                showStatus('Applying preferences...', true);
-
-                const response = await fetch('/preferences', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(preferences)
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    showStatus('Preferences applied! Recalculating routes...', true);
-                    // Wait a moment for route recalculation, then refresh
-                    setTimeout(loadRouteAlternatives, 1500);
-                } else {
-                    showStatus('Error: ' + result.error, false);
-                }
-            } catch (error) {
-                showStatus('Failed to save preferences: ' + error, false);
-            }
-        }
 
         async function loadRouteAlternatives() {
             try {
@@ -1077,7 +1022,7 @@ class NavigationWebServer(BaseHTTPRequestHandler):
         """Return current navigation status as JSON."""
         try:
             # Subscribe to messages with longer timeout to ensure we get fresh data
-            sm = messaging.SubMaster(['navStateSP', 'liveLocationKalman'], poll='navStateSP')
+            sm = messaging.SubMaster(['navStateSP', 'liveLocationKalman', 'modelV2'], poll='navStateSP')
             sm.update(timeout=1000)  # 1 second timeout - wait for fresh navStateSP message
 
             # Read params
@@ -1112,6 +1057,11 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                 'next_maneuver_description': None,
                 'turn_desire_active': False,
                 'turn_desire_direction': None,
+                'lane_position': 'UNKNOWN',
+                'lane_line_left_visible': False,
+                'lane_line_right_visible': False,
+                'lane_positioning_active': False,
+                'lane_positioning_direction': None,
                 'target_speed_valid': False,
                 'target_speed': None,
             }
@@ -1123,6 +1073,18 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                     status['gps_valid'] = True
                     status['gps_lat'] = location.positionGeodetic.value[0]
                     status['gps_lon'] = location.positionGeodetic.value[1]
+
+            # Get lane position from modelV2
+            LANE_LINE_PROB_THRESHOLD = 0.5
+            if sm.alive['modelV2']:
+                model_v2 = sm['modelV2']
+                lane_position = detect_lane_position(model_v2)
+                status['lane_position'] = lane_position.value.upper()
+
+                # Check lane line visibility
+                if hasattr(model_v2, 'laneLineProbs') and len(model_v2.laneLineProbs) >= 3:
+                    status['lane_line_left_visible'] = model_v2.laneLineProbs[1] > LANE_LINE_PROB_THRESHOLD
+                    status['lane_line_right_visible'] = model_v2.laneLineProbs[2] > LANE_LINE_PROB_THRESHOLD
 
             # Get destination info from params
             if destination:
@@ -1148,6 +1110,9 @@ class NavigationWebServer(BaseHTTPRequestHandler):
 
                 status['turn_desire_active'] = nav.shouldSendTurnDesire
                 status['turn_desire_direction'] = nav.turnDesireDirection.raw if nav.shouldSendTurnDesire else None
+
+                status['lane_positioning_active'] = nav.shouldSendLanePositioning
+                status['lane_positioning_direction'] = nav.lanePositioningDirection.raw if nav.shouldSendLanePositioning else None
 
                 if nav.targetSpeedValid:
                     status['target_speed_valid'] = True

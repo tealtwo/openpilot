@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import numpy as np
+from enum import Enum
 from typing import Any, cast
 
 from openpilot.common.constants import CV
@@ -10,6 +11,14 @@ from openpilot.common.params import Params
 
 DIRECTIONS = ('left', 'right', 'straight')
 MODIFIABLE_DIRECTIONS = ('left', 'right')
+
+
+class LanePosition(Enum):
+  """Current lane position based on visible lane lines."""
+  LEFT_LANE = "left"       # Only right lane line visible
+  MIDDLE_LANE = "middle"   # Both lane lines visible
+  RIGHT_LANE = "right"     # Only left lane line visible
+  UNKNOWN = "unknown"      # Cannot determine (no visible lane lines)
 
 EARTH_MEAN_RADIUS = 6371007.2
 SPEED_CONVERSIONS = {
@@ -138,6 +147,44 @@ def maxspeed_to_ms(maxspeed: dict[str, str | float]) -> float:
 
 def field_valid(dat: dict, field: str) -> bool:
   return field in dat and dat[field] is not None
+
+
+def detect_lane_position(model_v2) -> LanePosition:
+  """
+  Detect current lane position based on visible lane lines from modelV2.
+
+  Args:
+    model_v2: modelV2 message with laneLineProbs
+
+  Returns:
+    LanePosition enum indicating current lane
+  """
+  # Lane line probabilities:
+  # Index 0: current lane
+  # Index 1: left lane line
+  # Index 2: right lane line
+  # Index 3+: further lanes
+
+  LANE_LINE_PROB_THRESHOLD = 0.5
+
+  if not model_v2 or not hasattr(model_v2, 'laneLineProbs') or len(model_v2.laneLineProbs) < 3:
+    return LanePosition.UNKNOWN
+
+  left_lane_visible = model_v2.laneLineProbs[1] > LANE_LINE_PROB_THRESHOLD
+  right_lane_visible = model_v2.laneLineProbs[2] > LANE_LINE_PROB_THRESHOLD
+
+  if left_lane_visible and right_lane_visible:
+    # Both lane lines visible - we're in a middle lane
+    return LanePosition.MIDDLE_LANE
+  elif left_lane_visible and not right_lane_visible:
+    # Only left lane line visible - we're in the rightmost lane
+    return LanePosition.RIGHT_LANE
+  elif right_lane_visible and not left_lane_visible:
+    # Only right lane line visible - we're in the leftmost lane
+    return LanePosition.LEFT_LANE
+  else:
+    # No lane lines visible - cannot determine position
+    return LanePosition.UNKNOWN
 
 
 def parse_banner_instructions(banners: Any, distance_to_maneuver: float = 0.0) -> dict[str, Any] | None:

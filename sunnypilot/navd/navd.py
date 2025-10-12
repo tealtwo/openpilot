@@ -9,7 +9,7 @@ from cereal import messaging, custom, log
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper, config_realtime_process
 from openpilot.common.swaglog import cloudlog
-from openpilot.sunnypilot.navd.helpers import Coordinate
+from openpilot.sunnypilot.navd.helpers import Coordinate, detect_lane_position, LanePosition
 from openpilot.sunnypilot.navd.route_manager import RouteManager
 
 
@@ -23,7 +23,7 @@ class NavigationDaemon:
         self.params = Params()
 
         # Messaging
-        self.sm = messaging.SubMaster(['liveLocationKalman'])
+        self.sm = messaging.SubMaster(['liveLocationKalman', 'modelV2'])
         self.pm = messaging.PubMaster(['navStateSP'])
 
         # Get Mapbox token - try parameter first, then use default
@@ -43,6 +43,7 @@ class NavigationDaemon:
         self.last_bearing: float | None = None
         self.localizer_valid = False
         self.v_ego: float = 0.0  # Current vehicle speed in m/s
+        self.current_lane_position: LanePosition = LanePosition.UNKNOWN  # Current detected lane position
 
         # Destination tracking
         self.last_destination_json = ""
@@ -188,6 +189,14 @@ class NavigationDaemon:
                     self.params.put_bool("NavigationActive", False)
                     self.last_destination_json = ""  # Clear destination tracking
 
+    def update_lane_position(self) -> None:
+        """Update current lane position from modelV2."""
+        if 'modelV2' in self.sm.valid and self.sm.valid['modelV2']:
+            model_v2 = self.sm['modelV2']
+            self.current_lane_position = detect_lane_position(model_v2)
+        else:
+            self.current_lane_position = LanePosition.UNKNOWN
+
     def check_destination_update(self) -> None:
         # Check if new destination has been set via params
         # Check every 5 cycles (~1 second at 5Hz)
@@ -290,10 +299,17 @@ class NavigationDaemon:
             else:
                 nav_state.nextManeuverValid = False
 
-            # Iniate Turn desire control
+            # Initiate Turn desire control
             should_send, direction = self.route_manager.should_send_turn_desire()
             nav_state.shouldSendTurnDesire = should_send
             nav_state.turnDesireDirection = self._map_direction(direction)
+
+            # Lane positioning guidance (for early lane changes before exits/turns)
+            should_send_lane_pos, lane_pos_direction = self.route_manager.should_send_lane_positioning_desire(
+                self.current_lane_position
+            )
+            nav_state.shouldSendLanePositioning = should_send_lane_pos
+            nav_state.lanePositioningDirection = self._map_direction(lane_pos_direction)
 
             # E2e Speed guidance (dynamic distance based on current speed)
             target_speed = self.route_manager.get_target_speed(self.v_ego)
@@ -312,6 +328,7 @@ class NavigationDaemon:
         else:
             nav_state.nextManeuverValid = False
             nav_state.shouldSendTurnDesire = False
+            nav_state.shouldSendLanePositioning = False
             nav_state.targetSpeedValid = False
 
         # Send message
@@ -347,6 +364,9 @@ class NavigationDaemon:
 
         # Update location
         self.update_location()
+
+        # Update lane position from modelV2
+        self.update_lane_position()
 
         # Check for destination updates
         self.check_destination_update()

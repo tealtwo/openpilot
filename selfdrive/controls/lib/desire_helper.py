@@ -37,6 +37,12 @@ TURN_DESIRES = {
   custom.TurnDirection.turnRight: log.Desire.turnRight,
 }
 
+LANE_POSITIONING_DESIRES = {
+  custom.TurnDirection.none: log.Desire.none,
+  custom.TurnDirection.turnLeft: log.Desire.keepLeft,
+  custom.TurnDirection.turnRight: log.Desire.keepRight,
+}
+
 
 class DesireHelper:
   def __init__(self):
@@ -50,6 +56,7 @@ class DesireHelper:
     self.alc = AutoLaneChangeController(self)
     self.lane_turn_controller = LaneTurnController(self)
     self.lane_turn_direction = custom.TurnDirection.none
+    self.lane_positioning_direction = custom.TurnDirection.none
 
   @staticmethod
   def get_lane_change_direction(CS):
@@ -66,6 +73,9 @@ class DesireHelper:
     self.lane_turn_controller.update_lane_turn(blindspot_left=carstate.leftBlindspot, blindspot_right=carstate.rightBlindspot,
                                                left_blinker=carstate.leftBlinker, right_blinker=carstate.rightBlinker, v_ego=v_ego)
     self.lane_turn_direction = self.lane_turn_controller.get_turn_direction()
+
+    # Lane positioning controller update (for early positioning before exits/turns)
+    self.lane_positioning_direction = self.lane_turn_controller.get_lane_positioning_direction()
 
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX or self.alc.lane_change_set_timer == AutoLaneChangeMode.OFF:
       self.lane_change_state = LaneChangeState.off
@@ -126,10 +136,22 @@ class DesireHelper:
 
     self.prev_one_blinker = one_blinker
 
+    # Desire priority:
+    # 1. Turn desires (highest) - actual turns at intersections
+    # 2. Lane change desires (medium) - manual lane changes or auto lane changes
+    # 3. Lane positioning desires (lowest) - early positioning for exits/turns
     if self.lane_turn_direction != custom.TurnDirection.none:
+      # Turn desires take highest priority
       self.desire = TURN_DESIRES[self.lane_turn_direction]
-    else:
+    elif self.lane_change_state != LaneChangeState.off:
+      # Lane change desires take second priority
       self.desire = DESIRES[self.lane_change_direction][self.lane_change_state]
+    elif self.lane_positioning_direction != custom.TurnDirection.none:
+      # Lane positioning desires take lowest priority (only when not turning or changing lanes)
+      self.desire = LANE_POSITIONING_DESIRES[self.lane_positioning_direction]
+    else:
+      # No special desire
+      self.desire = log.Desire.none
 
     # Send keep pulse once per second during LaneChangeStart.preLaneChange
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.laneChangeStarting):

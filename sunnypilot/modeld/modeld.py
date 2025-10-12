@@ -317,6 +317,8 @@ def main(demo=False):
       # Update navigation turn desires before updating desire helper
       # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
       DH.lane_turn_controller.update_nav_turn(sm['navStateSP'] if sm.alive['navStateSP'] else None)
+      # Update navigation lane positioning desires (for early lane positioning before exits/turns)
+      DH.lane_turn_controller.update_nav_lane_positioning(sm['navStateSP'] if sm.alive['navStateSP'] else None)
       DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction

@@ -25,6 +25,10 @@ class LaneTurnController:
     self.nav_turn_direction = custom.TurnDirection.none
     self.nav_enabled = False
 
+    # Navigation-based lane positioning
+    self.nav_lane_positioning_direction = custom.TurnDirection.none
+    self.nav_lane_positioning_enabled = False
+
   def read_params(self):
     self.enabled = self.params.get_bool("LaneTurnDesire")
     value = float(self.params.get("LaneTurnValue", return_default=True)) * CV.MPH_TO_MS
@@ -69,6 +73,46 @@ class LaneTurnController:
     else:
       self.nav_turn_direction = custom.TurnDirection.none
       self.nav_enabled = False
+
+  def update_nav_lane_positioning(self, nav_state) -> None:
+    """
+    Update lane positioning direction based on navigation state.
+
+    This is used for early lane positioning (0.5-1 mile before exits/turns)
+    to guide the vehicle into the correct lane.
+
+    Args:
+      nav_state: NavStateSP message from navd
+    """
+    if not nav_state:
+      self.nav_lane_positioning_direction = custom.TurnDirection.none
+      self.nav_lane_positioning_enabled = False
+      return
+
+    # Check if navigation wants to send lane positioning desires
+    if nav_state.active and nav_state.shouldSendLanePositioning:
+      # Convert capnp enum integer to custom.TurnDirection enum
+      lane_pos_dir_int = nav_state.lanePositioningDirection
+      if lane_pos_dir_int == custom.TurnDirection.turnLeft:
+        self.nav_lane_positioning_direction = custom.TurnDirection.turnLeft
+      elif lane_pos_dir_int == custom.TurnDirection.turnRight:
+        self.nav_lane_positioning_direction = custom.TurnDirection.turnRight
+      else:
+        self.nav_lane_positioning_direction = custom.TurnDirection.none
+      self.nav_lane_positioning_enabled = True
+    else:
+      self.nav_lane_positioning_direction = custom.TurnDirection.none
+      self.nav_lane_positioning_enabled = False
+
+  def get_lane_positioning_direction(self):
+    """Get navigation lane positioning direction (for keepLeft/keepRight desires)."""
+    if not self.enabled:
+      return custom.TurnDirection.none
+
+    if self.nav_lane_positioning_enabled and self.nav_lane_positioning_direction != custom.TurnDirection.none:
+      return self.nav_lane_positioning_direction
+
+    return custom.TurnDirection.none
 
   def get_turn_direction(self):
     if not self.enabled:
