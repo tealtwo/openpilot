@@ -203,6 +203,8 @@ class RouteManager:
                 return False
 
             # Build exclusions list based on preferences
+            # NOTE: Mapbox API does not allow 'exclude' parameter with 'alternatives=true'
+            # So we request all alternatives and let user choose based on route characteristics
             exclude_params = []
             if self.preferences.get('avoid_tolls'):
                 exclude_params.append('toll')
@@ -224,9 +226,10 @@ class RouteManager:
                 "alternatives_max_num": 3,  # Request up to 3 alternatives
             }
 
-            # Add exclusions if any
-            if exclude_params:
-                params["exclude"] = ",".join(exclude_params)
+            # NOTE: Do NOT add exclude parameters when requesting alternatives
+            # Mapbox returns 422 error if both alternatives and exclude are used together
+            # Instead, we show all routes with their characteristics (toll/highway badges)
+            # and let the user choose based on the UI
 
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
