@@ -61,6 +61,52 @@ class Maneuver:
         return None  # No speed recommendation
 
 
+@dataclass
+class RouteAlternative:
+    """Represents a calculated route alternative."""
+    geometry: List[Coordinate]  # Route geometry points
+    maneuvers: List[Maneuver]  # List of maneuvers
+    distance: float  # Total distance in meters
+    duration: float  # Total duration in seconds
+    summary: str  # Route summary (e.g., "Via I-55 N")
+    has_tolls: bool = False  # Route includes toll roads
+    has_highways: bool = False  # Route includes highways/motorways
+
+    @staticmethod
+    def detect_route_characteristics(maneuvers: List[Maneuver], route_data: Dict) -> Tuple[bool, bool]:
+        """
+        Detect if route has tolls or highways based on maneuver data.
+
+        Args:
+            maneuvers: List of route maneuvers
+            route_data: Raw route data from API (for checking road classes)
+
+        Returns:
+            (has_tolls, has_highways) tuple
+        """
+        has_tolls = False
+        has_highways = False
+
+        # Check route legs for toll and highway roads
+        for leg in route_data.get("legs", []):
+            for step in leg.get("steps", []):
+                # Check for toll roads
+                if step.get("toll_collection"):
+                    has_tolls = True
+
+                # Check road class for highways
+                road_class = step.get("intersections", [{}])[0].get("classes", [])
+                if any(cls in ["motorway", "trunk", "highway"] for cls in road_class):
+                    has_highways = True
+
+                # Also check step name for highway indicators
+                name = step.get("name", "").lower()
+                if any(keyword in name for keyword in ["interstate", "highway", "motorway", "freeway", "i-"]):
+                    has_highways = True
+
+        return has_tolls, has_highways
+
+
 class RouteManager:
     """Manages route calculation, tracking, and maneuver detection."""
 
@@ -98,6 +144,17 @@ class RouteManager:
         # Arrival detection
         self.has_arrived_flag = False
 
+        # Route preferences
+        self.preferences = {
+            'avoid_tolls': False,
+            'avoid_highways': False,
+            'avoid_ferries': False,
+    }
+
+        # Route alternatives
+        self.route_alternatives: List[RouteAlternative] = []
+        self.selected_route_index = 0
+
         # OSRM demo server (fallback only)
         self.osrm_server = "http://router.project-osrm.org"
 
@@ -132,11 +189,20 @@ class RouteManager:
             return False
 
     def _calculate_route_mapbox(self, start: Coordinate, end: Coordinate) -> bool:
-        """Calculate route using Mapbox Directions API."""
+        """Calculate route using Mapbox Directions API with alternatives and preferences."""
         try:
             if not self.mapbox_token:
                 cloudlog.error("navd: Mapbox token not provided")
                 return False
+
+            # Build exclusions list based on preferences
+            exclude_params = []
+            if self.preferences.get('avoid_tolls'):
+                exclude_params.append('toll')
+            if self.preferences.get('avoid_highways'):
+                exclude_params.append('motorway')
+            if self.preferences.get('avoid_ferries'):
+                exclude_params.append('ferry')
 
             # Mapbox Directions API
             url = f"https://api.mapbox.com/directions/v5/mapbox/driving/{start.longitude},{start.latitude};{end.longitude},{end.latitude}"
@@ -146,8 +212,14 @@ class RouteManager:
                 "steps": "true",
                 "banner_instructions": "true",
                 "voice_instructions": "false",
-                "overview": "full"
+                "overview": "full",
+                "alternatives": "true",  # Request alternative routes
+                "alternatives_max_num": 3,  # Request up to 3 alternatives
             }
+
+            # Add exclusions if any
+            if exclude_params:
+                params["exclude"] = ",".join(exclude_params)
 
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
@@ -157,61 +229,102 @@ class RouteManager:
                 cloudlog.error(f"navd: Mapbox returned no routes: {data.get('code')}")
                 return False
 
-            route = data["routes"][0]
+            # Parse all route alternatives
+            self.route_alternatives = []
+            for route_data in data["routes"]:
+                # Parse geometry
+                coordinates = route_data["geometry"]["coordinates"]
+                geometry = [Coordinate(lat, lon) for lon, lat in coordinates]
 
-            # Parse geometry
-            coordinates = route["geometry"]["coordinates"]
-            self.route_geometry = [Coordinate(lat, lon) for lon, lat in coordinates]
+                # Parse maneuvers from steps
+                maneuvers = []
+                distance_accumulator = 0.0
 
-            # Parse maneuvers from steps
-            self.maneuvers = []
-            distance_accumulator = 0.0
+                for leg in route_data.get("legs", []):
+                    for step in leg.get("steps", []):
+                        maneuver_data = step.get("maneuver", {})
+                        maneuver_type = maneuver_data.get("type", "turn")
+                        modifier = maneuver_data.get("modifier", "straight")
 
-            for leg in route.get("legs", []):
-                for step in leg.get("steps", []):
-                    maneuver_data = step.get("maneuver", {})
-                    maneuver_type = maneuver_data.get("type", "turn")
-                    modifier = maneuver_data.get("modifier", "straight")
+                        # Get location
+                        location = maneuver_data.get("location", [0, 0])
+                        lon, lat = location[0], location[1]
 
-                    # Get location
-                    location = maneuver_data.get("location", [0, 0])
-                    lon, lat = location[0], location[1]
+                        # Determine direction
+                        direction = self._parse_direction(modifier)
 
-                    # Determine direction
-                    direction = self._parse_direction(modifier)
+                        # Get turn angle if available (bearing_after - bearing_before)
+                        bearing_before = maneuver_data.get("bearing_before")
+                        bearing_after = maneuver_data.get("bearing_after")
+                        angle = None
+                        if bearing_before is not None and bearing_after is not None:
+                            angle = (bearing_after - bearing_before) % 360
+                            if angle > 180:
+                                angle = angle - 360
 
-                    # Get turn angle if available (bearing_after - bearing_before)
-                    bearing_before = maneuver_data.get("bearing_before")
-                    bearing_after = maneuver_data.get("bearing_after")
-                    angle = None
-                    if bearing_before is not None and bearing_after is not None:
-                        angle = (bearing_after - bearing_before) % 360
-                        if angle > 180:
-                            angle = angle - 360
+                        # Get instruction text
+                        instruction = maneuver_data.get("instruction", step.get("name", "Continue"))
 
-                    # Get instruction text
-                    instruction = maneuver_data.get("instruction", step.get("name", "Continue"))
+                        # Create maneuver
+                        maneuver = Maneuver(
+                            distance_from_start=distance_accumulator,
+                            latitude=lat,
+                            longitude=lon,
+                            type=self._map_maneuver_type(maneuver_type),
+                            direction=direction,
+                            description=instruction,
+                            angle=angle
+                        )
 
-                    # Create maneuver
-                    maneuver = Maneuver(
-                        distance_from_start=distance_accumulator,
-                        latitude=lat,
-                        longitude=lon,
-                        type=self._map_maneuver_type(maneuver_type),
-                        direction=direction,
-                        description=instruction,
-                        angle=angle
-                    )
+                        maneuvers.append(maneuver)
+                        distance_accumulator += step.get("distance", 0)
 
-                    self.maneuvers.append(maneuver)
-                    distance_accumulator += step.get("distance", 0)
+                # Detect route characteristics
+                has_tolls, has_highways = RouteAlternative.detect_route_characteristics(maneuvers, route_data)
 
-            # Calculate total distance and duration
-            self.distance_remaining = route.get("distance", 0)
-            self.time_remaining = route.get("duration", 0)
+                # Get route summary (try to extract from legs)
+                summary = route_data.get("legs", [{}])[0].get("summary", "")
+                if not summary:
+                    # Fallback: use first major road name from steps
+                    for leg in route_data.get("legs", []):
+                        for step in leg.get("steps", []):
+                            name = step.get("name", "")
+                            if name and name not in ["", "unnamed road"]:
+                                summary = f"Via {name}"
+                                break
+                        if summary:
+                            break
+                if not summary:
+                    summary = "Route"
 
-            cloudlog.info(f"navd: Mapbox route: {self.distance_remaining:.0f}m, {self.time_remaining:.0f}s, {len(self.maneuvers)} maneuvers")
-            return True
+                # Create RouteAlternative
+                alternative = RouteAlternative(
+                    geometry=geometry,
+                    maneuvers=maneuvers,
+                    distance=route_data.get("distance", 0),
+                    duration=route_data.get("duration", 0),
+                    summary=summary,
+                    has_tolls=has_tolls,
+                    has_highways=has_highways,
+                )
+
+                self.route_alternatives.append(alternative)
+
+            # If we got alternatives, select the first one by default
+            if self.route_alternatives:
+                self.selected_route_index = 0
+                selected = self.route_alternatives[0]
+                self.route_geometry = selected.geometry
+                self.maneuvers = selected.maneuvers
+                self.distance_remaining = selected.distance
+                self.time_remaining = selected.duration
+
+                cloudlog.info(f"navd: Mapbox found {len(self.route_alternatives)} routes. "
+                             f"Selected route: {selected.distance:.0f}m, {selected.duration:.0f}s, "
+                             f"{len(selected.maneuvers)} maneuvers")
+                return True
+
+            return False
 
         except requests.RequestException as e:
             cloudlog.exception(f"navd: Mapbox API request failed: {e}")
@@ -576,3 +689,75 @@ class RouteManager:
                     return True
 
         return False
+
+    def select_route(self, route_index: int) -> bool:
+        """
+        Select one of the calculated route alternatives.
+
+        Args:
+            route_index: Index of the route to select (0-based)
+
+        Returns:
+            True if route was selected successfully, False otherwise
+        """
+        if not self.route_alternatives:
+            cloudlog.error("navd: No route alternatives available to select")
+            return False
+
+        if not (0 <= route_index < len(self.route_alternatives)):
+            cloudlog.error(f"navd: Invalid route index {route_index}, only {len(self.route_alternatives)} routes available")
+            return False
+
+        # Select the route
+        self.selected_route_index = route_index
+        selected = self.route_alternatives[route_index]
+
+        # Update active route data
+        self.route_geometry = selected.geometry
+        self.maneuvers = selected.maneuvers
+        self.distance_remaining = selected.distance
+        self.time_remaining = selected.duration
+
+        cloudlog.info(f"navd: Selected route {route_index + 1}/{len(self.route_alternatives)}: "
+                     f"{selected.distance:.0f}m, {selected.duration:.0f}s - {selected.summary}")
+        return True
+
+    def set_preferences(self, preferences: Dict[str, bool]) -> Dict[str, bool]:
+        """
+        Update routing preferences.
+
+        Args:
+            preferences: Dictionary with preference flags (avoid_tolls, avoid_highways, avoid_ferries)
+
+        Returns:
+            Updated preferences dictionary
+        """
+        # Update preferences
+        for key in ['avoid_tolls', 'avoid_highways', 'avoid_ferries']:
+            if key in preferences:
+                self.preferences[key] = bool(preferences[key])
+
+        cloudlog.info(f"navd: Updated routing preferences: {self.preferences}")
+        return self.preferences.copy()
+
+    def get_route_alternatives_summary(self) -> List[Dict]:
+        """
+        Get a summary of all calculated route alternatives.
+
+        Returns:
+            List of route summary dictionaries suitable for API/UI display
+        """
+        summaries = []
+        for i, route in enumerate(self.route_alternatives):
+            summaries.append({
+                'index': i,
+                'distance': route.distance,
+                'distance_mi': route.distance * 0.000621371,  # Convert to miles
+                'duration': route.duration,
+                'duration_min': route.duration / 60.0,  # Convert to minutes
+                'summary': route.summary,
+                'has_tolls': route.has_tolls,
+                'has_highways': route.has_highways,
+                'is_selected': i == self.selected_route_index,
+            })
+        return summaries

@@ -541,6 +541,10 @@ class NavigationWebServer(BaseHTTPRequestHandler):
             self.wfile.write(HTML_TEMPLATE.encode())
         elif self.path == '/nav_status':
             self._handle_nav_status()
+        elif self.path == '/preferences':
+            self._handle_get_preferences()
+        elif self.path == '/route_alternatives':
+            self._handle_get_route_alternatives()
         else:
             self.send_response(404)
             self.end_headers()
@@ -556,6 +560,12 @@ class NavigationWebServer(BaseHTTPRequestHandler):
             self._handle_set_destination_address(post_data)
         elif self.path == '/cancel_navigation':
             self._handle_cancel_navigation()
+        elif self.path == '/preferences':
+            self._handle_set_preferences(post_data)
+        elif self.path == '/calculate_routes':
+            self._handle_calculate_routes(post_data)
+        elif self.path == '/select_route':
+            self._handle_select_route(post_data)
         else:
             self.send_response(404)
             self.end_headers()
@@ -751,6 +761,142 @@ class NavigationWebServer(BaseHTTPRequestHandler):
         except Exception as e:
             cloudlog.exception(f"navd: Error getting nav status: {e}")
             self._send_json_response({'error': str(e)})
+
+    def _handle_get_preferences(self):
+        """Return current routing preferences as JSON."""
+        try:
+            # Read preferences from params
+            prefs_json = self.params.get("NavigationPreferences")
+
+            # Default preferences if not set
+            preferences = {
+                'avoid_tolls': False,
+                'avoid_highways': False,
+                'avoid_ferries': False,
+            }
+
+            # Parse stored preferences if available
+            if prefs_json:
+                try:
+                    stored_prefs = json.loads(prefs_json)
+                    preferences.update(stored_prefs)
+                except:
+                    pass
+
+            cloudlog.info(f"navd: Web UI retrieved preferences: {preferences}")
+            self._send_json_response({'success': True, 'preferences': preferences})
+
+        except Exception as e:
+            cloudlog.exception(f"navd: Error getting preferences: {e}")
+            self._send_json_response({'success': False, 'error': str(e)})
+
+    def _handle_get_route_alternatives(self):
+        """Return calculated route alternatives as JSON."""
+        try:
+            # Read route alternatives from params (written by navd.py)
+            alternatives_json = self.params.get("NavigationRouteAlternatives")
+
+            alternatives = []
+            if alternatives_json:
+                try:
+                    alternatives = json.loads(alternatives_json)
+                except:
+                    pass
+
+            cloudlog.info(f"navd: Web UI retrieved {len(alternatives)} route alternatives")
+            self._send_json_response({'success': True, 'alternatives': alternatives})
+
+        except Exception as e:
+            cloudlog.exception(f"navd: Error getting route alternatives: {e}")
+            self._send_json_response({'success': False, 'error': str(e)})
+
+    def _handle_set_preferences(self, post_data):
+        """Update routing preferences."""
+        try:
+            data = json.loads(post_data.decode('utf-8'))
+
+            # Validate and extract preferences
+            preferences = {}
+            for key in ['avoid_tolls', 'avoid_highways', 'avoid_ferries']:
+                if key in data:
+                    preferences[key] = bool(data[key])
+
+            if not preferences:
+                self._send_json_response({'success': False, 'error': 'No valid preferences provided'})
+                return
+
+            # Read existing preferences
+            prefs_json = self.params.get("NavigationPreferences")
+            current_prefs = {
+                'avoid_tolls': False,
+                'avoid_highways': False,
+                'avoid_ferries': False,
+            }
+            if prefs_json:
+                try:
+                    current_prefs.update(json.loads(prefs_json))
+                except:
+                    pass
+
+            # Update with new preferences
+            current_prefs.update(preferences)
+
+            # Write back to params
+            self.params.put("NavigationPreferences", json.dumps(current_prefs))
+
+            cloudlog.info(f"navd: Web UI updated preferences: {current_prefs}")
+
+            # Set recalculation flag to trigger route recalculation in navd.py
+            self.params.put_bool("NavigationRecalculateRoutes", True)
+
+            self._send_json_response({'success': True, 'preferences': current_prefs})
+
+        except Exception as e:
+            cloudlog.exception(f"navd: Error setting preferences: {e}")
+            self._send_json_response({'success': False, 'error': str(e)})
+
+    def _handle_calculate_routes(self, post_data):
+        """Trigger route recalculation with current destination and preferences."""
+        try:
+            # Check if destination is set
+            dest_json = self.params.get("NavigationDestination")
+            if not dest_json:
+                self._send_json_response({'success': False, 'error': 'No destination set'})
+                return
+
+            # Set recalculation flag
+            self.params.put_bool("NavigationRecalculateRoutes", True)
+
+            cloudlog.info("navd: Web UI requested route recalculation")
+            self._send_json_response({'success': True, 'message': 'Route recalculation triggered'})
+
+        except Exception as e:
+            cloudlog.exception(f"navd: Error triggering route calculation: {e}")
+            self._send_json_response({'success': False, 'error': str(e)})
+
+    def _handle_select_route(self, post_data):
+        """Select a specific route alternative."""
+        try:
+            data = json.loads(post_data.decode('utf-8'))
+            route_index = data.get('route_index')
+
+            if route_index is None:
+                self._send_json_response({'success': False, 'error': 'Missing route_index'})
+                return
+
+            if not isinstance(route_index, int) or route_index < 0:
+                self._send_json_response({'success': False, 'error': 'Invalid route_index'})
+                return
+
+            # Write route selection to params
+            self.params.put("NavigationRouteSelection", json.dumps({'route_index': route_index}))
+
+            cloudlog.info(f"navd: Web UI selected route {route_index}")
+            self._send_json_response({'success': True, 'route_index': route_index})
+
+        except Exception as e:
+            cloudlog.exception(f"navd: Error selecting route: {e}")
+            self._send_json_response({'success': False, 'error': str(e)})
 
     def _send_json_response(self, data):
         """Send JSON response."""

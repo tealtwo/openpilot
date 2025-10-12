@@ -47,7 +47,111 @@ class NavigationDaemon:
         self.last_destination_json = ""
         self.destination_check_counter = 0
 
+        # Route selection state tracking
+        self.last_preferences_json = ""
+        self.last_route_selection_json = ""
+        self.preferences_check_counter = 0
+        self.route_selection_check_counter = 0
+
+        # Load routing preferences
+        self.load_preferences_from_params()
+
         cloudlog.info("navd: Navigation daemon initialized")
+
+    def load_preferences_from_params(self) -> None:
+        """Load routing preferences from params and apply to route manager."""
+        prefs_json = self.params.get("NavigationPreferences")
+
+        if prefs_json:
+            try:
+                preferences = json.loads(prefs_json)
+                updated_prefs = self.route_manager.set_preferences(preferences)
+                cloudlog.info(f"navd: Loaded routing preferences: {updated_prefs}")
+                self.last_preferences_json = prefs_json
+            except json.JSONDecodeError as e:
+                cloudlog.error(f"navd: Failed to parse preferences JSON: {e}")
+
+    def check_preferences_update(self) -> None:
+        """Check for preference updates and recalculation requests."""
+        self.preferences_check_counter += 1
+        if self.preferences_check_counter < 5:
+            return
+
+        self.preferences_check_counter = 0
+
+        # Check for preference changes
+        prefs_json = self.params.get("NavigationPreferences")
+        if prefs_json and prefs_json != self.last_preferences_json:
+            try:
+                preferences = json.loads(prefs_json)
+                updated_prefs = self.route_manager.set_preferences(preferences)
+                cloudlog.info(f"navd: Preferences updated: {updated_prefs}")
+                self.last_preferences_json = prefs_json
+            except json.JSONDecodeError as e:
+                cloudlog.error(f"navd: Failed to parse preferences JSON: {e}")
+
+        # Check for recalculation request
+        if self.params.get_bool("NavigationRecalculateRoutes"):
+            # Clear flag immediately
+            self.params.remove("NavigationRecalculateRoutes")
+
+            # Trigger recalculation if we have an active destination
+            if self.route_manager.active and self.current_position and self.localizer_valid:
+                cloudlog.info("navd: Recalculating routes with new preferences...")
+                success = self.route_manager.calculate_route(
+                    self.current_position,
+                    self.route_manager.destination,
+                    self.route_manager.destination_name
+                )
+
+                if success:
+                    cloudlog.info("navd: Route recalculation succeeded")
+                    self.write_route_alternatives_to_params()
+                else:
+                    cloudlog.error("navd: Route recalculation failed")
+
+    def check_route_selection_update(self) -> None:
+        """Check for route selection updates from web UI."""
+        self.route_selection_check_counter += 1
+        if self.route_selection_check_counter < 5:
+            return
+
+        self.route_selection_check_counter = 0
+
+        selection_json = self.params.get("NavigationRouteSelection")
+
+        if not selection_json:
+            return
+
+        if selection_json == self.last_route_selection_json:
+            return
+
+        try:
+            selection_data = json.loads(selection_json)
+            route_index = selection_data.get("route_index")
+
+            if route_index is not None:
+                success = self.route_manager.select_route(route_index)
+                if success:
+                    cloudlog.info(f"navd: Successfully selected route {route_index}")
+                    self.last_route_selection_json = selection_json
+                else:
+                    cloudlog.error(f"navd: Failed to select route {route_index}")
+
+        except json.JSONDecodeError as e:
+            cloudlog.error(f"navd: Failed to parse route selection JSON: {e}")
+        except Exception as e:
+            cloudlog.exception(f"navd: Error processing route selection: {e}")
+
+    def write_route_alternatives_to_params(self) -> None:
+        """Write calculated route alternatives to params for web UI."""
+        try:
+            alternatives = self.route_manager.get_route_alternatives_summary()
+            alternatives_json = json.dumps(alternatives)
+            self.params.put("NavigationRouteAlternatives", alternatives_json)
+            cloudlog.info(f"navd: Wrote {len(alternatives)} route alternatives to params")
+        except Exception as e:
+            cloudlog.exception(f"navd: Error writing route alternatives: {e}")
 
     def update_location(self) -> None:
         # Update Current Location liveLocationKalman
@@ -137,6 +241,8 @@ class NavigationDaemon:
                 cloudlog.info("navd: Route calculation succeeded")
                 self.params.put_bool("NavigationActive", True)
                 self.last_destination_json = destination_json  # Mark as processed after success
+                # Write route alternatives to params for web UI
+                self.write_route_alternatives_to_params()
             else:
                 cloudlog.error("navd: Route calculation failed")
                 self.params.put_bool("NavigationActive", False)
@@ -236,6 +342,12 @@ class NavigationDaemon:
 
         # Check for destination updates
         self.check_destination_update()
+
+        # Check for preferences updates and recalculation requests
+        self.check_preferences_update()
+
+        # Check for route selection updates
+        self.check_route_selection_update()
 
         # Publish navigation state
         self.publish_nav_state()
