@@ -222,8 +222,7 @@ class RouteManager:
                 "banner_instructions": "true",
                 "voice_instructions": "false",
                 "overview": "full",
-                "alternatives": "true",  # Request alternative routes
-                "alternatives_max_num": 3,  # Request up to 3 alternatives
+                "alternatives": "true",  # Request alternative routes (gives up to 3 by default)
             }
 
             # NOTE: Do NOT add exclude parameters when requesting alternatives
