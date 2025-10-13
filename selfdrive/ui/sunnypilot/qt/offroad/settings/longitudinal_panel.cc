@@ -101,6 +101,10 @@ void LongitudinalPanel::showEvent(QShowEvent *event) {
   refresh(offroad);
 }
 
+void LongitudinalPanel::hideEvent(QHideEvent *event) {
+  main_layout->setCurrentWidget(cruisePanelScreen);
+}
+
 void LongitudinalPanel::refresh(bool _offroad) {
   auto cp_bytes = params.get("CarParamsPersistent");
   auto cp_sp_bytes = params.get("CarParamsSPPersistent");
