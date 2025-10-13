@@ -153,8 +153,12 @@ def detect_lane_position(model_v2) -> LanePosition:
   """
   Detect current lane position based on visible lane lines from modelV2.
 
+  Filters out curbs and road edges by checking if lane lines are at realistic distances.
+  Typical lane width is 3-4 meters. Lane lines closer than 1.8m or farther than 5m
+  are likely curbs/edges, not drivable lanes.
+
   Args:
-    model_v2: modelV2 message with laneLineProbs
+    model_v2: modelV2 message with laneLineProbs and laneLines
 
   Returns:
     LanePosition enum indicating current lane
@@ -166,13 +170,44 @@ def detect_lane_position(model_v2) -> LanePosition:
   # Index 3+: further lanes
 
   LANE_LINE_PROB_THRESHOLD = 0.5
+  MIN_LANE_WIDTH = 1.8  # Minimum realistic lane line distance (meters)
+  MAX_LANE_WIDTH = 5.0  # Maximum realistic lane line distance (meters)
 
   if not model_v2 or not hasattr(model_v2, 'laneLineProbs') or len(model_v2.laneLineProbs) < 3:
     return LanePosition.UNKNOWN
 
-  left_lane_visible = model_v2.laneLineProbs[1] > LANE_LINE_PROB_THRESHOLD
-  right_lane_visible = model_v2.laneLineProbs[2] > LANE_LINE_PROB_THRESHOLD
+  # Check if we have laneLines data with position information
+  if not hasattr(model_v2, 'laneLines') or len(model_v2.laneLines) < 3:
+    return LanePosition.UNKNOWN
 
+  # Get lane line probabilities
+  left_lane_prob = model_v2.laneLineProbs[1]
+  right_lane_prob = model_v2.laneLineProbs[2]
+
+  # Check if lane lines meet probability threshold
+  left_lane_visible = left_lane_prob > LANE_LINE_PROB_THRESHOLD
+  right_lane_visible = right_lane_prob > LANE_LINE_PROB_THRESHOLD
+
+  # Validate lane line distances to filter out curbs/edges
+  # laneLines[1] = left line (negative y), laneLines[2] = right line (positive y)
+  # y[0] is the lateral position at the closest point
+  if left_lane_visible:
+    left_lane = model_v2.laneLines[1]
+    if hasattr(left_lane, 'y') and len(left_lane.y) > 0:
+      left_y = left_lane.y[0]
+      # Left lane line should be to the left (negative y) and within reasonable distance
+      if left_y > -MIN_LANE_WIDTH or left_y < -MAX_LANE_WIDTH:
+        left_lane_visible = False
+
+  if right_lane_visible:
+    right_lane = model_v2.laneLines[2]
+    if hasattr(right_lane, 'y') and len(right_lane.y) > 0:
+      right_y = right_lane.y[0]
+      # Right lane line should be to the right (positive y) and within reasonable distance
+      if right_y < MIN_LANE_WIDTH or right_y > MAX_LANE_WIDTH:
+        right_lane_visible = False
+
+  # Determine lane position based on validated lane lines
   if left_lane_visible and right_lane_visible:
     # Both lane lines visible - we're in a middle lane
     return LanePosition.MIDDLE_LANE

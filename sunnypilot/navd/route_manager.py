@@ -12,13 +12,14 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance, LanePosition
 
 # Thresholds for turn desire triggering
-TURN_DESIRE_START_DISTANCE = 100.0  # meters - start sending turn desires
+TURN_DESIRE_START_DISTANCE = 100.0  # meters - start sending turn desires (will be dynamic later)
 TURN_DESIRE_END_DISTANCE = 20.0     # meters - stop sending turn desires after passing
 MANEUVER_COMPLETION_THRESHOLD = 30.0  # meters - consider maneuver completed
 
 # Thresholds for lane positioning guidance
 LANE_POSITIONING_START_DISTANCE = 1600.0  # meters (~1 mile) - start suggesting lane changes
-LANE_POSITIONING_END_DISTANCE = 100.0     # meters - stop lane positioning when turn desires take over
+LANE_POSITIONING_END_DISTANCE = 50.0      # meters - stop lane positioning (should have moved earlier)
+# Note: Lane positioning stops at 50m. Turn desires start at 100m and take priority via desire hierarchy.
 
 # Turn sharpness thresholds (degrees) for speed recommendations
 SHARP_TURN_ANGLE = 60.0    # < 60 degrees is sharp
@@ -606,7 +607,9 @@ class RouteManager:
                 cloudlog.info("navd: ✓ Lane positioning cleared (straight maneuver)")
             return False, "none"
 
-        # Lane positioning is active in the distance zone BEFORE turn desires take over
+        # Lane positioning active from 1600m down to 50m
+        # Below 50m: disabled - vehicle should have changed lanes by now
+        # Turn desires take over at 40m
         if not (LANE_POSITIONING_END_DISTANCE < distance_to_maneuver <= LANE_POSITIONING_START_DISTANCE):
             if self.last_lane_positioning_active:
                 self.last_lane_positioning_active = False
