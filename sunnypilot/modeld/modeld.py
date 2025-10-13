@@ -139,6 +139,56 @@ class ModelState(ModelStateBase):
     return log.ModelDataV2.Action(desiredAcceleration=float(desired_accel), shouldStop=bool(should_stop))
 
 
+def get_nav_turn_features(nav_state, turn_direction, model_input_size: int) -> np.ndarray:
+  """
+  Populate nav_features array with continuous turn reinforcement data.
+
+  This provides the model with sustained information about upcoming navigation turns,
+  preventing it from backing out after receiving the initial desire pulse.
+
+  Args:
+    nav_state: Navigation state message from navStateSP
+    turn_direction: Turn direction from desire helper (custom.TurnDirection enum)
+    model_input_size: Size of the nav_features input array
+
+  Returns:
+    np.ndarray with turn context features for the model
+  """
+  features = np.zeros(model_input_size, dtype=np.float32)
+
+  # Only populate features if navigation is active and turn is requested
+  if nav_state is None or not nav_state.active:
+    return features
+
+  # Import here to avoid circular dependency
+  from cereal import custom
+
+  if turn_direction == custom.TurnDirection.none:
+    return features
+
+  # Feature 0: Turn active flag (1.0 if turn is active)
+  if nav_state.shouldSendTurnDesire:
+    features[0] = 1.0
+
+  # Feature 1: Turn direction (-1.0 for left, 1.0 for right)
+  if turn_direction == custom.TurnDirection.turnLeft:
+    features[1] = -1.0
+  elif turn_direction == custom.TurnDirection.turnRight:
+    features[1] = 1.0
+
+  # Feature 2: Distance to turn (if available in nav_state)
+  # This will be 0 if the field doesn't exist
+  if hasattr(nav_state, 'distanceToNextManeuver'):
+    # Normalize distance: 1.0 at 100m, 0.0 at 0m
+    distance_normalized = np.clip(nav_state.distanceToNextManeuver / 100.0, 0.0, 2.0)
+    features[2] = distance_normalized
+
+    # Feature 3: Turn urgency (inverse of distance)
+    features[3] = 1.0 - np.clip(nav_state.distanceToNextManeuver / 100.0, 0.0, 1.0)
+
+  return features
+
+
 def main(demo=False):
   cloudlog.warning("modeld init")
 
@@ -289,8 +339,16 @@ def main(demo=False):
     if "driving_style" in model.inputs.keys():
       inputs['driving_style'] = np.array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=np.float32)
 
+    # Update navigation turn desires FIRST (before using them for nav_features)
+    # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
+    nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
+    DH.lane_turn_controller.update_nav_turn(nav_state)
+    # Update navigation lane positioning desires (for early lane positioning before exits/turns)
+    DH.lane_turn_controller.update_nav_lane_positioning(nav_state)
+
+    # Populate nav_features with continuous turn reinforcement (uses CURRENT turn direction)
     if "nav_features" in model.inputs.keys():
-      inputs['nav_features'] = np.zeros(ModelConstants.NAV_FEATURE_LEN, dtype=np.float32)
+      inputs['nav_features'] = get_nav_turn_features(nav_state, DH.lane_turn_direction, ModelConstants.NAV_FEATURE_LEN)
 
     if "nav_instructions" in model.inputs.keys():
       inputs['nav_instructions'] = np.zeros(ModelConstants.NAV_INSTRUCTION_LEN, dtype=np.float32)
@@ -314,11 +372,7 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      # Update navigation turn desires before updating desire helper
-      # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
-      DH.lane_turn_controller.update_nav_turn(sm['navStateSP'] if sm.alive['navStateSP'] else None)
-      # Update navigation lane positioning desires (for early lane positioning before exits/turns)
-      DH.lane_turn_controller.update_nav_lane_positioning(sm['navStateSP'] if sm.alive['navStateSP'] else None)
+      # Update desire helper (navigation turn desires were already updated earlier)
       DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
