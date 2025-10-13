@@ -434,9 +434,15 @@ def main(demo=False):
       if key in model.numpy_inputs:
         inputs[key] = value()
 
-    # Populate nav_features with continuous turn reinforcement (uses turn direction from previous iteration)
+    # Update navigation turn desires FIRST (before using them for nav_features and enforcement)
+    # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
+    nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
+    DH.lane_turn_controller.update_nav_turn(nav_state)
+    # Update navigation lane positioning desires (for early lane positioning before exits/turns)
+    DH.lane_turn_controller.update_nav_lane_positioning(nav_state)
+
+    # Populate nav_features with continuous turn reinforcement (uses CURRENT turn direction)
     if 'nav_features' in model.numpy_inputs:
-      nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
       nav_features_size = model.model_runner.input_shapes.get('nav_features')[1]
       inputs['nav_features'] = get_nav_turn_features(nav_state, DH.lane_turn_direction, nav_features_size)
 
@@ -451,8 +457,7 @@ def main(demo=False):
       posenet_send = messaging.new_message('cameraOdometry')
       mdv2sp_send = messaging.new_message('modelDataV2SP')
 
-      # Pass nav_state and turn_direction for turn enforcement
-      nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
+      # Pass nav_state and turn_direction for turn enforcement (nav_state already retrieved earlier)
       action = model.get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego,
                                            nav_state=nav_state, turn_direction=DH.lane_turn_direction)
       prev_action = action
@@ -464,11 +469,7 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      # Update navigation turn desires before updating desire helper
-      # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
-      DH.lane_turn_controller.update_nav_turn(sm['navStateSP'] if sm.alive['navStateSP'] else None)
-      # Update navigation lane positioning desires (for early lane positioning before exits/turns)
-      DH.lane_turn_controller.update_nav_lane_positioning(sm['navStateSP'] if sm.alive['navStateSP'] else None)
+      # Update desire helper (navigation turn desires were already updated earlier)
       DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction
