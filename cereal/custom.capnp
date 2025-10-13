@@ -416,11 +416,11 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
   laneTurnDirection @0 :TurnDirection;
 }
 
-  enum TurnDirection {
-    none @0;
-    turnLeft @1;
-    turnRight @2;
-  }
+enum TurnDirection {
+  none @0;
+  turnLeft @1;
+  turnRight @2;
+}
 
 struct NavStateSP @0xcb9fd56c7057593a {
   # Navigation state and guidance information
