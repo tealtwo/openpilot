@@ -217,7 +217,8 @@ class ModelState(ModelStateBase):
 
     # Apply navigation turn enforcement before smoothing to prevent backing out of turns
     if nav_state is not None and turn_direction is not None:
-      distance_to_turn = nav_state.distanceToNextManeuver if hasattr(nav_state, 'distanceToNextManeuver') else 0.0
+      # Default to large distance if field doesn't exist (safer than 0.0 which would always trigger enforcement)
+      distance_to_turn = nav_state.distanceToNextManeuver if hasattr(nav_state, 'distanceToNextManeuver') else 999.0
       desired_curvature = self.apply_nav_turn_enforcement(desired_curvature, nav_state, turn_direction, distance_to_turn)
 
     if self.generation is not None and self.generation >= 10: # smooth curvature for post FOF models
