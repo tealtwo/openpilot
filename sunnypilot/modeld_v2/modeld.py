@@ -67,6 +67,10 @@ class ModelState(ModelStateBase):
     self.frames = {name: DrivingModelFrame(context, buffer_length) for name in self.model_runner.vision_input_names}
     self.prev_desire = np.zeros(self.constants.DESIRE_LEN, dtype=np.float32)
 
+    # Turn enforcement for navigation turns
+    self.MIN_TURN_CURVATURE = 0.0008  # Minimum curvature to enforce during turns
+    self.TURN_ENFORCEMENT_DISTANCE = 9.0  # Distance (meters) at which to proactively enforce turn AT the intersection
+
     # img buffers are managed in openCL transform code
     self.numpy_inputs = {}
     self.temporal_buffers = {}
@@ -159,14 +163,63 @@ class ModelState(ModelStateBase):
     if self.mlsim:
       self.numpy_inputs[input_name_prev][:] = 0*self.temporal_buffers[input_name_prev][0, self.temporal_idxs_map[input_name_prev]]
 
+  def apply_nav_turn_enforcement(self, desired_curvature: float, nav_state, turn_direction,
+                                  distance_to_turn: float) -> float:
+    """
+    Proactively enforce minimum curvature during navigation turns to prevent backing out.
+
+    When within 9m of turn AND turn desire is active, force minimum curvature to ensure
+    the turn executes even if model tries to back out.
+
+    Args:
+      desired_curvature: Curvature output from model
+      nav_state: Navigation state from navStateSP
+      turn_direction: Current turn direction from desire helper
+      distance_to_turn: Distance to upcoming turn in meters
+
+    Returns:
+      Enforced curvature value
+    """
+    from cereal import custom
+
+    # Only enforce for active navigation turns
+    if nav_state is None or not nav_state.active or turn_direction == custom.TurnDirection.none:
+      return desired_curvature
+
+    # Only enforce for turn desires (not lane changes or lane positioning)
+    if not nav_state.shouldSendTurnDesire:
+      return desired_curvature
+
+    # Proactively enforce when AT the intersection (<9m)
+    if distance_to_turn < self.TURN_ENFORCEMENT_DISTANCE:
+      if turn_direction == custom.TurnDirection.turnLeft:
+        # Enforce minimum left turn curvature (negative)
+        if desired_curvature > -self.MIN_TURN_CURVATURE:
+          cloudlog.debug(f"navd: Enforcing LEFT turn at {distance_to_turn:.1f}m: {desired_curvature:.6f} -> {-self.MIN_TURN_CURVATURE:.6f}")
+          return -self.MIN_TURN_CURVATURE
+      elif turn_direction == custom.TurnDirection.turnRight:
+        # Enforce minimum right turn curvature (positive)
+        if desired_curvature < self.MIN_TURN_CURVATURE:
+          cloudlog.debug(f"navd: Enforcing RIGHT turn at {distance_to_turn:.1f}m: {desired_curvature:.6f} -> {self.MIN_TURN_CURVATURE:.6f}")
+          return self.MIN_TURN_CURVATURE
+
+    return desired_curvature
+
   def get_action_from_model(self, model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                            lat_action_t: float, long_action_t: float, v_ego: float) -> log.ModelDataV2.Action:
+                            lat_action_t: float, long_action_t: float, v_ego: float, nav_state=None,
+                            turn_direction=None) -> log.ModelDataV2.Action:
     plan = model_output['plan'][0]
     desired_accel, should_stop = get_accel_from_plan(plan[:, Plan.VELOCITY][:, 0], plan[:, Plan.ACCELERATION][:, 0], self.constants.T_IDXS,
                                                      action_t=long_action_t)
     desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, self.LONG_SMOOTH_SECONDS)
 
     desired_curvature = get_curvature_from_output(model_output, v_ego, lat_action_t, self.mlsim)
+
+    # Apply navigation turn enforcement before smoothing to prevent backing out of turns
+    if nav_state is not None and turn_direction is not None:
+      distance_to_turn = nav_state.distanceToNextManeuver if hasattr(nav_state, 'distanceToNextManeuver') else 0.0
+      desired_curvature = self.apply_nav_turn_enforcement(desired_curvature, nav_state, turn_direction, distance_to_turn)
+
     if self.generation is not None and self.generation >= 10: # smooth curvature for post FOF models
       if v_ego > self.MIN_LAT_CONTROL_SPEED:
         desired_curvature = smooth_value(desired_curvature, prev_action.desiredCurvature, self.LAT_SMOOTH_SECONDS)
@@ -174,6 +227,56 @@ class ModelState(ModelStateBase):
         desired_curvature = prev_action.desiredCurvature
 
     return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature),desiredAcceleration=float(desired_accel), shouldStop=bool(should_stop))
+
+
+def get_nav_turn_features(nav_state, turn_direction, model_input_size: int) -> np.ndarray:
+  """
+  Populate nav_features array with continuous turn reinforcement data.
+
+  This provides the model with sustained information about upcoming navigation turns,
+  preventing it from backing out after receiving the initial desire pulse.
+
+  Args:
+    nav_state: Navigation state message from navStateSP
+    turn_direction: Turn direction from desire helper (custom.TurnDirection enum)
+    model_input_size: Size of the nav_features input array
+
+  Returns:
+    np.ndarray with turn context features for the model
+  """
+  features = np.zeros(model_input_size, dtype=np.float32)
+
+  # Only populate features if navigation is active and turn is requested
+  if nav_state is None or not nav_state.active:
+    return features
+
+  # Import here to avoid circular dependency
+  from cereal import custom
+
+  if turn_direction == custom.TurnDirection.none:
+    return features
+
+  # Feature 0: Turn active flag (1.0 if turn is active)
+  if nav_state.shouldSendTurnDesire:
+    features[0] = 1.0
+
+  # Feature 1: Turn direction (-1.0 for left, 1.0 for right)
+  if turn_direction == custom.TurnDirection.turnLeft:
+    features[1] = -1.0
+  elif turn_direction == custom.TurnDirection.turnRight:
+    features[1] = 1.0
+
+  # Feature 2: Distance to turn (if available in nav_state)
+  # This will be 0 if the field doesn't exist
+  if hasattr(nav_state, 'distanceToNextManeuver'):
+    # Normalize distance: 1.0 at 100m, 0.0 at 0m
+    distance_normalized = np.clip(nav_state.distanceToNextManeuver / 100.0, 0.0, 2.0)
+    features[2] = distance_normalized
+
+    # Feature 3: Turn urgency (inverse of distance)
+    features[3] = 1.0 - np.clip(nav_state.distanceToNextManeuver / 100.0, 0.0, 1.0)
+
+  return features
 
 
 def main(demo=False):
@@ -325,12 +428,17 @@ def main(demo=False):
     conditional_inputs = {
       "lateral_control_params": lambda v_ego=v_ego, lat_delay=lat_delay: np.array([v_ego, lat_delay], dtype=np.float32),
       "driving_style": lambda: np.array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], dtype=np.float32),
-      "nav_features": lambda: np.zeros(model.model_runner.input_shapes.get('nav_features')[1], dtype=np.float32),
       "nav_instructions": lambda: np.zeros(model.model_runner.input_shapes.get('nav_instructions')[1], dtype=np.float32),
     }
     for key, value in conditional_inputs.items():
       if key in model.numpy_inputs:
         inputs[key] = value()
+
+    # Populate nav_features with continuous turn reinforcement (uses turn direction from previous iteration)
+    if 'nav_features' in model.numpy_inputs:
+      nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
+      nav_features_size = model.model_runner.input_shapes.get('nav_features')[1]
+      inputs['nav_features'] = get_nav_turn_features(nav_state, DH.lane_turn_direction, nav_features_size)
 
     mt1 = time.perf_counter()
     model_output = model.run(bufs, transforms, inputs, prepare_only)
@@ -343,7 +451,10 @@ def main(demo=False):
       posenet_send = messaging.new_message('cameraOdometry')
       mdv2sp_send = messaging.new_message('modelDataV2SP')
 
-      action = model.get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego)
+      # Pass nav_state and turn_direction for turn enforcement
+      nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
+      action = model.get_action_from_model(model_output, prev_action, lat_delay + DT_MDL, long_delay + DT_MDL, v_ego,
+                                           nav_state=nav_state, turn_direction=DH.lane_turn_direction)
       prev_action = action
       fill_model_msg(drivingdata_send, modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,
