@@ -32,15 +32,15 @@ DESIRES = {
 }
 
 TURN_DESIRES = {
-  custom.ModelDataV2SP.TurnDirection.none: log.Desire.none,
-  custom.ModelDataV2SP.TurnDirection.turnLeft: log.Desire.turnLeft,
-  custom.ModelDataV2SP.TurnDirection.turnRight: log.Desire.turnRight,
+  custom.TurnDirection.none: log.Desire.none,
+  custom.TurnDirection.turnLeft: log.Desire.turnLeft,
+  custom.TurnDirection.turnRight: log.Desire.turnRight,
 }
 
 LANE_POSITIONING_DESIRES = {
-  custom.ModelDataV2SP.TurnDirection.none: log.Desire.none,
-  custom.ModelDataV2SP.TurnDirection.turnLeft: log.Desire.keepLeft,
-  custom.ModelDataV2SP.TurnDirection.turnRight: log.Desire.keepRight,
+  custom.TurnDirection.none: log.Desire.none,
+  custom.TurnDirection.turnLeft: log.Desire.keepLeft,
+  custom.TurnDirection.turnRight: log.Desire.keepRight,
 }
 
 
@@ -55,8 +55,8 @@ class DesireHelper:
     self.desire = log.Desire.none
     self.alc = AutoLaneChangeController(self)
     self.lane_turn_controller = LaneTurnController(self)
-    self.lane_turn_direction = custom.ModelDataV2SP.TurnDirection.none
-    self.lane_positioning_direction = custom.ModelDataV2SP.TurnDirection.none
+    self.lane_turn_direction = custom.TurnDirection.none
+    self.lane_positioning_direction = custom.TurnDirection.none
 
   @staticmethod
   def get_lane_change_direction(CS):
@@ -140,7 +140,7 @@ class DesireHelper:
     # 1. Turn desires (highest) - actual turns at intersections
     # 2. Lane change desires (medium) - manual lane changes or auto lane changes
     # 3. Lane positioning desires (lowest) - early positioning for exits/turns
-    if self.lane_turn_direction != custom.ModelDataV2SP.TurnDirection.none:
+    if self.lane_turn_direction != custom.TurnDirection.none:
       # Turn desires take highest priority
       self.desire = TURN_DESIRES[self.lane_turn_direction]
     elif self.lane_change_state != LaneChangeState.off:
