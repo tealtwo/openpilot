@@ -222,6 +222,68 @@ def detect_lane_position(model_v2) -> LanePosition:
     return LanePosition.UNKNOWN
 
 
+def count_visible_same_direction_lanes(model_v2) -> int:
+  """
+  Count number of visible same-direction lanes from modelV2.
+
+  This is used for safety checks to prevent lane changes into oncoming traffic
+  on two-way single-lane roads. The function counts validated lane lines
+  (filtering out curbs and road edges) to determine if multiple same-direction
+  lanes exist.
+
+  Args:
+    model_v2: modelV2 message with laneLineProbs and laneLines
+
+  Returns:
+    Number of visible lanes:
+      - 2: Multiple same-direction lanes confirmed (both left and right lane lines visible)
+      - 1: Single lane or uncertain (conservative default)
+  """
+  LANE_LINE_PROB_THRESHOLD = 0.5
+  MIN_LANE_WIDTH = 1.8  # Minimum realistic lane line distance (meters)
+  MAX_LANE_WIDTH = 5.0  # Maximum realistic lane line distance (meters)
+
+  # Conservative default: assume single lane if we can't determine
+  if not model_v2 or not hasattr(model_v2, 'laneLineProbs') or len(model_v2.laneLineProbs) < 3:
+    return 1
+
+  if not hasattr(model_v2, 'laneLines') or len(model_v2.laneLines) < 3:
+    return 1
+
+  # Check left lane line
+  left_lane_visible = False
+  if len(model_v2.laneLineProbs) > 1:
+    left_lane_visible = model_v2.laneLineProbs[1] > LANE_LINE_PROB_THRESHOLD
+    if left_lane_visible:
+      left_lane = model_v2.laneLines[1]
+      if hasattr(left_lane, 'y') and len(left_lane.y) > 0:
+        left_y = left_lane.y[0]
+        # Left lane line should be to the left (negative y) and within reasonable distance
+        # This filters out curbs/edges
+        if left_y > -MIN_LANE_WIDTH or left_y < -MAX_LANE_WIDTH:
+          left_lane_visible = False
+
+  # Check right lane line
+  right_lane_visible = False
+  if len(model_v2.laneLineProbs) > 2:
+    right_lane_visible = model_v2.laneLineProbs[2] > LANE_LINE_PROB_THRESHOLD
+    if right_lane_visible:
+      right_lane = model_v2.laneLines[2]
+      if hasattr(right_lane, 'y') and len(right_lane.y) > 0:
+        right_y = right_lane.y[0]
+        # Right lane line should be to the right (positive y) and within reasonable distance
+        # This filters out curbs/edges
+        if right_y < MIN_LANE_WIDTH or right_y > MAX_LANE_WIDTH:
+          right_lane_visible = False
+
+  # If both lane lines are visible and validated, we have at least 2 lanes in same direction
+  # If only one or none visible, conservatively assume single lane
+  if left_lane_visible and right_lane_visible:
+    return 2  # Multi-lane confirmed
+  else:
+    return 1  # Single lane or uncertain - be conservative
+
+
 def parse_banner_instructions(banners: Any, distance_to_maneuver: float = 0.0) -> dict[str, Any] | None:
   if not len(banners):
     return None

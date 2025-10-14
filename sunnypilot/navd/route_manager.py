@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
 
 from openpilot.common.swaglog import cloudlog
-from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance, LanePosition
+from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance, LanePosition, count_visible_same_direction_lanes
 
 # Thresholds for turn desire triggering
 TURN_DESIRE_START_DISTANCE = 100.0  # meters - start sending turn desires (will be dynamic later)
@@ -52,6 +52,7 @@ class Maneuver:
     direction: str  # "left", "right", "straight", "none"
     description: str
     angle: Optional[float] = None  # Turn angle in degrees (for speed calculation)
+    road_classes: Optional[List[str]] = None  # Road classification (e.g., ["motorway"], ["trunk"], [])
 
     def get_recommended_speed(self) -> Optional[float]:
         """Calculate recommended speed for this maneuver."""
@@ -283,6 +284,9 @@ class RouteManager:
                         # Get instruction text
                         instruction = maneuver_data.get("instruction", step.get("name", "Continue"))
 
+                        # Extract road classes for safety checks
+                        road_classes = step.get("intersections", [{}])[0].get("classes", [])
+
                         # Create maneuver
                         maneuver = Maneuver(
                             distance_from_start=distance_accumulator,
@@ -291,7 +295,8 @@ class RouteManager:
                             type=self._map_maneuver_type(maneuver_type),
                             direction=direction,
                             description=instruction,
-                            angle=angle
+                            angle=angle,
+                            road_classes=road_classes if road_classes else None
                         )
 
                         maneuvers.append(maneuver)
@@ -406,6 +411,9 @@ class RouteManager:
                         if angle > 180:
                             angle = angle - 360
 
+                    # Extract road classes for safety checks
+                    road_classes = step.get("intersections", [{}])[0].get("classes", [])
+
                     # Create maneuver
                     maneuver = Maneuver(
                         distance_from_start=distance_accumulator,
@@ -414,7 +422,8 @@ class RouteManager:
                         type=self._map_maneuver_type(maneuver_type),
                         direction=direction,
                         description=step.get("name", "Continue"),
-                        angle=angle
+                        angle=angle,
+                        road_classes=road_classes if road_classes else None
                     )
 
                     self.maneuvers.append(maneuver)
@@ -467,6 +476,26 @@ class RouteManager:
             "straight": "continue_",
         }
         return type_mapping.get(maneuver_type, "turn")
+
+    def _is_highway_road(self, maneuver: Maneuver) -> bool:
+        """
+        Check if a maneuver is on a controlled-access highway.
+
+        Highways (motorways, trunks, etc.) are multi-lane by definition and have
+        same-direction traffic only, so lane changes are always safe on them.
+
+        Args:
+            maneuver: The maneuver to check
+
+        Returns:
+            True if on a highway/motorway, False otherwise
+        """
+        if not maneuver.road_classes:
+            return False
+
+        # Mapbox/OSRM road classes indicating controlled-access roads
+        highway_classes = {"motorway", "trunk", "highway", "freeway"}
+        return bool(set(maneuver.road_classes) & highway_classes)
 
     def update_position(self, current_pos: Coordinate) -> None:
         """
@@ -569,15 +598,18 @@ class RouteManager:
 
         return should_send, direction
 
-    def should_send_lane_positioning_desire(self, current_lane_position: LanePosition) -> Tuple[bool, str]:
+    def should_send_lane_positioning_desire(self, current_lane_position: LanePosition, model_v2) -> Tuple[bool, str]:
         """
         Determine if we should send lane positioning desires (keepLeft/keepRight) for upcoming exits/turns.
 
         This provides early guidance (0.5-1 mile) to position the vehicle in the correct lane
         for upcoming exits or turns.
 
+        **SAFETY**: Includes checks to prevent lane changes into oncoming traffic on two-way single-lane roads.
+
         Args:
             current_lane_position: Current detected lane position (from modelV2)
+            model_v2: modelV2 message for lane counting and safety validation
 
         Returns:
             (should_send, direction) tuple where:
@@ -623,6 +655,10 @@ class RouteManager:
                 cloudlog.info("navd: ✓ Lane positioning cleared (unknown lane position)")
             return False, "none"
 
+        # SAFETY VALIDATION: Check road type and visible lanes
+        is_highway = self._is_highway_road(maneuver)
+        visible_lanes = count_visible_same_direction_lanes(model_v2)
+
         # Determine if we need to change lanes based on maneuver direction and current position
         should_send = False
         direction = "none"
@@ -630,13 +666,30 @@ class RouteManager:
         if maneuver.direction == "left":
             # Left exit/turn - suggest moving left if not already in leftmost lane
             if current_lane_position in [LanePosition.MIDDLE_LANE, LanePosition.RIGHT_LANE]:
-                should_send = True
-                direction = "left"
+                # SAFETY CHECK: Only allow left lane change if:
+                # 1. On a highway (controlled access, multi-lane by definition), OR
+                # 2. Can visually confirm 2+ same-direction lanes exist
+                if is_highway or visible_lanes >= 2:
+                    should_send = True
+                    direction = "left"
+                else:
+                    # BLOCKED: Potential two-way single-lane road
+                    cloudlog.warning(f"navd: 🚫 BLOCKED left lane positioning - "
+                                   f"Non-highway road with only {visible_lanes} visible lane(s). "
+                                   f"Possible two-way single-lane road! Road classes: {maneuver.road_classes}")
         elif maneuver.direction == "right":
             # Right exit/turn - suggest moving right if not already in rightmost lane
             if current_lane_position in [LanePosition.MIDDLE_LANE, LanePosition.LEFT_LANE]:
-                should_send = True
-                direction = "right"
+                # SAFETY CHECK: Right changes are generally safer (toward shoulder),
+                # but still validate to avoid edge cases
+                if is_highway or visible_lanes >= 2:
+                    should_send = True
+                    direction = "right"
+                else:
+                    # BLOCKED: Uncertain road configuration
+                    cloudlog.warning(f"navd: 🚫 BLOCKED right lane positioning - "
+                                   f"Non-highway road with only {visible_lanes} visible lane(s). "
+                                   f"Road classes: {maneuver.road_classes}")
 
         # Log when lane positioning state changes
         if should_send != self.last_lane_positioning_active or direction != self.last_lane_positioning_direction:

@@ -305,8 +305,10 @@ class NavigationDaemon:
             nav_state.turnDesireDirection = self._map_direction(direction)
 
             # Lane positioning guidance (for early lane changes before exits/turns)
+            # Pass model_v2 for safety validation (lane counting to prevent oncoming traffic lane changes)
             should_send_lane_pos, lane_pos_direction = self.route_manager.should_send_lane_positioning_desire(
-                self.current_lane_position
+                self.current_lane_position,
+                self.sm['modelV2']
             )
             nav_state.shouldSendLanePositioning = should_send_lane_pos
             nav_state.lanePositioningDirection = self._map_direction(lane_pos_direction)
