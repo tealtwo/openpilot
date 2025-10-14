@@ -299,8 +299,8 @@ class NavigationDaemon:
             else:
                 nav_state.nextManeuverValid = False
 
-            # Initiate Turn desire control
-            should_send, direction = self.route_manager.should_send_turn_desire()
+            # Initiate Turn desire control (dynamic distance based on turn characteristics and speed)
+            should_send, direction = self.route_manager.should_send_turn_desire(self.v_ego)
             nav_state.shouldSendTurnDesire = should_send
             nav_state.turnDesireDirection = self._map_direction(direction)
 

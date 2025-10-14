@@ -11,10 +11,32 @@ from dataclasses import dataclass
 from openpilot.common.swaglog import cloudlog
 from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometry, minimum_distance, LanePosition, count_visible_same_direction_lanes
 
-# Thresholds for turn desire triggering
-TURN_DESIRE_START_DISTANCE = 100.0  # meters - start sending turn desires (will be dynamic later)
-TURN_DESIRE_END_DISTANCE = 20.0     # meters - stop sending turn desires after passing
+# Thresholds for turn desire triggering - DYNAMIC DISTANCES
+# These replace the old fixed TURN_DESIRE_START_DISTANCE = 100.0
+# Distances based on turn angle, direction, and maneuver type
+TURN_DESIRE_END_DISTANCE = 0.0      # meters - stop sending turn desires after passing (immediate cutoff)
 MANEUVER_COMPLETION_THRESHOLD = 30.0  # meters - consider maneuver completed
+
+# Dynamic turn desire distances by turn angle (degrees)
+# Left turns get 5m more than right turns (complexity factor for crossing traffic)
+TURN_DESIRE_SHARP_LEFT = 40.0       # < 60 degrees
+TURN_DESIRE_SHARP_RIGHT = 35.0
+TURN_DESIRE_MODERATE_LEFT = 35.0    # 60-100 degrees
+TURN_DESIRE_MODERATE_RIGHT = 30.0
+TURN_DESIRE_GENTLE_LEFT = 30.0      # 100-140 degrees
+TURN_DESIRE_GENTLE_RIGHT = 25.0
+TURN_DESIRE_VERY_GENTLE = 20.0      # > 140 degrees (same for both left/right)
+
+# Special maneuver type distances
+TURN_DESIRE_EXIT = 50.0             # Highway exits need more distance
+TURN_DESIRE_ROUNDABOUT = 30.0       # Roundabouts - moderate distance
+
+# Bonuses for special conditions
+TURN_DESIRE_HIGHWAY_BONUS = 5.0     # +5m if on highway (higher speeds)
+TURN_DESIRE_SPEED_THRESHOLD_1 = 15.2  # 34 mph in m/s
+TURN_DESIRE_SPEED_BONUS_1 = 5.0     # +5m at 34 mph
+TURN_DESIRE_SPEED_THRESHOLD_2 = 20.1  # 45 mph in m/s
+TURN_DESIRE_SPEED_BONUS_2 = 10.0    # +10m at 45 mph
 
 # Thresholds for lane positioning guidance
 LANE_POSITIONING_START_DISTANCE = 1600.0  # meters (~1 mile) - start suggesting lane changes
@@ -497,6 +519,68 @@ class RouteManager:
         highway_classes = {"motorway", "trunk", "highway", "freeway"}
         return bool(set(maneuver.road_classes) & highway_classes)
 
+    def get_turn_desire_start_distance(self, maneuver: Maneuver, v_current: float = 0.0) -> float:
+        """
+        Calculate dynamic turn desire start distance based on maneuver characteristics.
+
+        This replaces the old fixed 100m distance with context-aware distances (20-50m)
+        to prevent premature turns at gas stations, driveways, and wrong intersections.
+
+        Args:
+            maneuver: The upcoming maneuver
+            v_current: Current vehicle speed in m/s (optional, for speed bonuses)
+
+        Returns:
+            Distance in meters at which to start sending turn desires
+        """
+        base_distance = 0.0
+
+        # Special maneuver types take priority
+        if maneuver.type == "exit":
+            base_distance = TURN_DESIRE_EXIT  # 50m
+        elif maneuver.type == "roundabout":
+            base_distance = TURN_DESIRE_ROUNDABOUT  # 30m
+        elif maneuver.type == "turn" and maneuver.angle is not None:
+            # Use turn angle to determine base distance
+            abs_angle = abs(maneuver.angle)
+
+            # Determine turn severity by angle
+            if abs_angle < SHARP_TURN_ANGLE:  # < 60 degrees - sharp turn
+                if maneuver.direction == "left":
+                    base_distance = TURN_DESIRE_SHARP_LEFT  # 40m
+                else:
+                    base_distance = TURN_DESIRE_SHARP_RIGHT  # 35m
+            elif abs_angle < MODERATE_TURN_ANGLE:  # 60-100 degrees - moderate turn
+                if maneuver.direction == "left":
+                    base_distance = TURN_DESIRE_MODERATE_LEFT  # 35m
+                else:
+                    base_distance = TURN_DESIRE_MODERATE_RIGHT  # 30m
+            elif abs_angle < GENTLE_TURN_ANGLE:  # 100-140 degrees - gentle turn
+                if maneuver.direction == "left":
+                    base_distance = TURN_DESIRE_GENTLE_LEFT  # 30m
+                else:
+                    base_distance = TURN_DESIRE_GENTLE_RIGHT  # 25m
+            else:  # > 140 degrees - very gentle
+                base_distance = TURN_DESIRE_VERY_GENTLE  # 20m
+        else:
+            # Fallback for turns without angle data
+            if maneuver.direction == "left":
+                base_distance = TURN_DESIRE_MODERATE_LEFT  # 35m
+            else:
+                base_distance = TURN_DESIRE_MODERATE_RIGHT  # 30m
+
+        # Apply highway bonus if on a highway
+        if self._is_highway_road(maneuver):
+            base_distance += TURN_DESIRE_HIGHWAY_BONUS  # +5m
+
+        # Apply speed bonuses (optional)
+        if v_current >= TURN_DESIRE_SPEED_THRESHOLD_2:
+            base_distance += TURN_DESIRE_SPEED_BONUS_2  # +10m at 45+ mph
+        elif v_current >= TURN_DESIRE_SPEED_THRESHOLD_1:
+            base_distance += TURN_DESIRE_SPEED_BONUS_1  # +5m at 34+ mph
+
+        return base_distance
+
     def update_position(self, current_pos: Coordinate) -> None:
         """
         Update current position and recalculate distance along route.
@@ -555,9 +639,12 @@ class RouteManager:
 
         return max(0, maneuver.distance_from_start - self.distance_along_route)
 
-    def should_send_turn_desire(self) -> Tuple[bool, str]:
+    def should_send_turn_desire(self, v_current: float = 0.0) -> Tuple[bool, str]:
         """
         Determine if we should send turn desires to the model.
+
+        Args:
+            v_current: Current vehicle speed in m/s (for dynamic distance calculation)
 
         Returns:
             (should_send, direction) tuple where:
@@ -574,11 +661,14 @@ class RouteManager:
         if maneuver.direction == "straight" or maneuver.direction == "none":
             return False, "none"
 
+        # Calculate dynamic turn desire start distance based on maneuver characteristics
+        turn_desire_start_distance = self.get_turn_desire_start_distance(maneuver, v_current)
+
         # Send turn desires when within threshold distance
         should_send = False
         direction = "none"
 
-        if 0 <= distance_to_maneuver <= TURN_DESIRE_START_DISTANCE:
+        if 0 <= distance_to_maneuver <= turn_desire_start_distance:
             should_send = True
             direction = maneuver.direction
         elif distance_to_maneuver < -TURN_DESIRE_END_DISTANCE:
@@ -589,7 +679,8 @@ class RouteManager:
         if should_send != self.last_turn_desire_active or direction != self.last_turn_direction:
             if should_send:
                 cloudlog.info(f"navd: 🔄 TURN DESIRE ACTIVE - Direction: {direction.upper()} | "
-                             f"Distance: {distance_to_maneuver:.0f}m | Maneuver: {maneuver.description}")
+                             f"Distance: {distance_to_maneuver:.0f}m | Trigger: {turn_desire_start_distance:.0f}m | "
+                             f"Maneuver: {maneuver.description}")
             else:
                 cloudlog.info(f"navd: ✓ Turn desire cleared")
 
