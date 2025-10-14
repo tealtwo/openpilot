@@ -41,7 +41,7 @@ TURN_DESIRE_SPEED_BONUS_2 = 10.0    # +10m at 45 mph
 # Thresholds for lane positioning guidance
 LANE_POSITIONING_START_DISTANCE = 1600.0  # meters (~1 mile) - start suggesting lane changes
 LANE_POSITIONING_END_DISTANCE = 50.0      # meters - stop lane positioning (should have moved earlier)
-# Note: Lane positioning stops at 50m. Turn desires start at 100m and take priority via desire hierarchy.
+# Note: Lane positioning stops at 50m. Turn desires start dynamically (20-50m) and take priority via desire hierarchy.
 
 # Turn sharpness thresholds (degrees) for speed recommendations
 SHARP_TURN_ANGLE = 60.0    # < 60 degrees is sharp
@@ -671,9 +671,8 @@ class RouteManager:
         if 0 <= distance_to_maneuver <= turn_desire_start_distance:
             should_send = True
             direction = maneuver.direction
-        elif distance_to_maneuver < -TURN_DESIRE_END_DISTANCE:
-            should_send = False
-            direction = "none"
+        # Note: Once distance_to_maneuver > turn_desire_start_distance or == 0 (passed turn),
+        # should_send remains False (initialized above)
 
         # Log when turn desire state changes
         if should_send != self.last_turn_desire_active or direction != self.last_turn_direction:
