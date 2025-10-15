@@ -6,6 +6,7 @@ from openpilot.sunnypilot.selfdrive.controls.lib.lane_turn_desire import LaneTur
 
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
+TurnDirection = custom.ModelDataV2SP.TurnDirection
 
 LANE_CHANGE_SPEED_MIN = 20 * CV.MPH_TO_MS
 LANE_CHANGE_TIME_MAX = 10.
@@ -32,15 +33,15 @@ DESIRES = {
 }
 
 TURN_DESIRES = {
-  custom.TurnDirection.none: log.Desire.none,
-  custom.TurnDirection.turnLeft: log.Desire.turnLeft,
-  custom.TurnDirection.turnRight: log.Desire.turnRight,
+  TurnDirection.none: log.Desire.none,
+  TurnDirection.turnLeft: log.Desire.turnLeft,
+  TurnDirection.turnRight: log.Desire.turnRight,
 }
 
 LANE_POSITIONING_DESIRES = {
-  custom.TurnDirection.none: log.Desire.none,
-  custom.TurnDirection.turnLeft: log.Desire.keepLeft,
-  custom.TurnDirection.turnRight: log.Desire.keepRight,
+  TurnDirection.none: log.Desire.none,
+  TurnDirection.turnLeft: log.Desire.keepLeft,
+  TurnDirection.turnRight: log.Desire.keepRight,
 }
 
 
@@ -55,8 +56,8 @@ class DesireHelper:
     self.desire = log.Desire.none
     self.alc = AutoLaneChangeController(self)
     self.lane_turn_controller = LaneTurnController(self)
-    self.lane_turn_direction = custom.TurnDirection.none
-    self.lane_positioning_direction = custom.TurnDirection.none
+    self.lane_turn_direction = TurnDirection.none
+    self.lane_positioning_direction = TurnDirection.none
 
   @staticmethod
   def get_lane_change_direction(CS):
@@ -140,13 +141,13 @@ class DesireHelper:
     # 1. Turn desires (highest) - actual turns at intersections
     # 2. Lane change desires (medium) - manual lane changes or auto lane changes
     # 3. Lane positioning desires (lowest) - early positioning for exits/turns
-    if self.lane_turn_direction != custom.TurnDirection.none:
+    if self.lane_turn_direction != TurnDirection.none:
       # Turn desires take highest priority
       self.desire = TURN_DESIRES[self.lane_turn_direction]
     elif self.lane_change_state != LaneChangeState.off:
       # Lane change desires take second priority
       self.desire = DESIRES[self.lane_change_direction][self.lane_change_state]
-    elif self.lane_positioning_direction != custom.TurnDirection.none:
+    elif self.lane_positioning_direction != TurnDirection.none:
       # Lane positioning desires take lowest priority (only when not turning or changing lanes)
       self.desire = LANE_POSITIONING_DESIRES[self.lane_positioning_direction]
     else:
