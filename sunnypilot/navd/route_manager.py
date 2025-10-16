@@ -53,8 +53,12 @@ GENTLE_TURN_ANGLE = 140.0   # 100-140 degrees is gentle
 SPEED_SHARP_TURN = 8.0      # ~18 mph
 SPEED_MODERATE_TURN = 12.0  # ~27 mph
 SPEED_GENTLE_TURN = 16.0    # ~36 mph
-SPEED_EXIT = 15.0           # ~34 mph for highway exits
 SPEED_ROUNDABOUT = 10.0     # ~22 mph for roundabouts
+
+# Highway ramp speeds (exit to another highway/controlled-access road)
+SPEED_HIGHWAY_RAMP_STRAIGHT = 27.0   # ~60 mph - straight/gentle ramps (>140° angle)
+SPEED_HIGHWAY_RAMP_CURVED = 22.5     # ~50 mph - moderate curve ramps (100-140° angle)
+SPEED_HIGHWAY_RAMP_SHARP = 20.0      # ~45 mph - sharp curve ramps (<100° angle)
 
 # Auto-rerouting thresholds
 OFF_ROUTE_DISTANCE_THRESHOLD = 75.0  # meters - trigger reroute if this far from route
@@ -75,13 +79,43 @@ class Maneuver:
     description: str
     angle: Optional[float] = None  # Turn angle in degrees (for speed calculation)
     road_classes: Optional[List[str]] = None  # Road classification (e.g., ["motorway"], ["trunk"], [])
+    next_road_classes: Optional[List[str]] = None  # Road classification of destination road after exit/turn
 
     def get_recommended_speed(self) -> Optional[float]:
-        """Calculate recommended speed for this maneuver."""
+        """
+        Calculate recommended speed for this maneuver.
+
+        For highway exits, differentiates between:
+        - Highway ramps (exit to another highway) - maintain higher speeds (45-60 mph)
+        - Surface street exits (exit to intersection) - use turn-based speeds (18-36 mph)
+        """
         if self.type == "exit":
-            return SPEED_EXIT
+            # Check if exit leads to another highway (ramp/interchange)
+            highway_classes = {"motorway", "trunk", "highway", "freeway"}
+            is_highway_ramp = bool(self.next_road_classes and set(self.next_road_classes) & highway_classes)
+
+            if is_highway_ramp:
+                # Highway-to-highway ramp - use angle-based speed
+                if self.angle is None or abs(self.angle) > GENTLE_TURN_ANGLE:  # >140° - straight/gentle
+                    return SPEED_HIGHWAY_RAMP_STRAIGHT  # 27.0 m/s (~60 mph)
+                elif abs(self.angle) > MODERATE_TURN_ANGLE:  # 100-140° - moderate curve
+                    return SPEED_HIGHWAY_RAMP_CURVED  # 22.5 m/s (~50 mph)
+                else:  # <100° - sharp curve (rare for highway ramps)
+                    return SPEED_HIGHWAY_RAMP_SHARP  # 20.0 m/s (~45 mph)
+            else:
+                # Exit to surface street - use intersection turn speeds
+                if self.angle is None:
+                    return SPEED_MODERATE_TURN  # Default moderate (12.0 m/s / 27 mph)
+                elif abs(self.angle) < SHARP_TURN_ANGLE:  # <60° - sharp turn
+                    return SPEED_SHARP_TURN  # 8.0 m/s (~18 mph)
+                elif abs(self.angle) < MODERATE_TURN_ANGLE:  # 60-100° - moderate turn
+                    return SPEED_MODERATE_TURN  # 12.0 m/s (~27 mph)
+                else:  # >100° - gentle turn
+                    return SPEED_GENTLE_TURN  # 16.0 m/s (~36 mph)
+
         elif self.type == "roundabout":
             return SPEED_ROUNDABOUT
+
         elif self.type == "turn" and self.angle is not None:
             if abs(self.angle) < SHARP_TURN_ANGLE:
                 return SPEED_SHARP_TURN
@@ -89,6 +123,7 @@ class Maneuver:
                 return SPEED_MODERATE_TURN
             elif abs(self.angle) < GENTLE_TURN_ANGLE:
                 return SPEED_GENTLE_TURN
+
         return None  # No speed recommendation
 
 
@@ -278,51 +313,65 @@ class RouteManager:
                 geometry = [Coordinate(lat, lon) for lon, lat in coordinates]
 
                 # Parse maneuvers from steps
+                # First, collect all steps into a flat list so we can look ahead to next step
+                all_steps = []
+                for leg in route_data.get("legs", []):
+                    for step in leg.get("steps", []):
+                        all_steps.append(step)
+
+                # Now create maneuvers with lookahead to populate next_road_classes
                 maneuvers = []
                 distance_accumulator = 0.0
 
-                for leg in route_data.get("legs", []):
-                    for step in leg.get("steps", []):
-                        maneuver_data = step.get("maneuver", {})
-                        maneuver_type = maneuver_data.get("type", "turn")
-                        modifier = maneuver_data.get("modifier", "straight")
+                for step_idx, step in enumerate(all_steps):
+                    maneuver_data = step.get("maneuver", {})
+                    maneuver_type = maneuver_data.get("type", "turn")
+                    modifier = maneuver_data.get("modifier", "straight")
 
-                        # Get location
-                        location = maneuver_data.get("location", [0, 0])
-                        lon, lat = location[0], location[1]
+                    # Get location
+                    location = maneuver_data.get("location", [0, 0])
+                    lon, lat = location[0], location[1]
 
-                        # Determine direction
-                        direction = self._parse_direction(modifier)
+                    # Determine direction
+                    direction = self._parse_direction(modifier)
 
-                        # Get turn angle if available (bearing_after - bearing_before)
-                        bearing_before = maneuver_data.get("bearing_before")
-                        bearing_after = maneuver_data.get("bearing_after")
-                        angle = None
-                        if bearing_before is not None and bearing_after is not None:
-                            angle = (bearing_after - bearing_before) % 360
-                            if angle > 180:
-                                angle = angle - 360
+                    # Get turn angle if available (bearing_after - bearing_before)
+                    bearing_before = maneuver_data.get("bearing_before")
+                    bearing_after = maneuver_data.get("bearing_after")
+                    angle = None
+                    if bearing_before is not None and bearing_after is not None:
+                        angle = (bearing_after - bearing_before) % 360
+                        if angle > 180:
+                            angle = angle - 360
 
-                        # Get instruction text
-                        instruction = maneuver_data.get("instruction", step.get("name", "Continue"))
+                    # Get instruction text
+                    instruction = maneuver_data.get("instruction", step.get("name", "Continue"))
 
-                        # Extract road classes for safety checks
-                        road_classes = step.get("intersections", [{}])[0].get("classes", [])
+                    # Extract road classes for current road
+                    road_classes = step.get("intersections", [{}])[0].get("classes", [])
 
-                        # Create maneuver
-                        maneuver = Maneuver(
-                            distance_from_start=distance_accumulator,
-                            latitude=lat,
-                            longitude=lon,
-                            type=self._map_maneuver_type(maneuver_type),
-                            direction=direction,
-                            description=instruction,
-                            angle=angle,
-                            road_classes=road_classes if road_classes else None
-                        )
+                    # Extract road classes for NEXT road (for exit speed logic)
+                    next_road_classes = None
+                    if step_idx + 1 < len(all_steps):
+                        next_step = all_steps[step_idx + 1]
+                        next_road_classes = next_step.get("intersections", [{}])[0].get("classes", [])
+                        next_road_classes = next_road_classes if next_road_classes else None
 
-                        maneuvers.append(maneuver)
-                        distance_accumulator += step.get("distance", 0)
+                    # Create maneuver
+                    maneuver = Maneuver(
+                        distance_from_start=distance_accumulator,
+                        latitude=lat,
+                        longitude=lon,
+                        type=self._map_maneuver_type(maneuver_type),
+                        direction=direction,
+                        description=instruction,
+                        angle=angle,
+                        road_classes=road_classes if road_classes else None,
+                        next_road_classes=next_road_classes
+                    )
+
+                    maneuvers.append(maneuver)
+                    distance_accumulator += step.get("distance", 0)
 
                 # Detect route characteristics
                 has_tolls, has_highways = RouteAlternative.detect_route_characteristics(maneuvers, route_data)
