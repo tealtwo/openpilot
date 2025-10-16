@@ -73,13 +73,13 @@ class GPSLaneTracker:
         Args:
             route_manager: RouteManager instance with active route
         """
-        if not route_manager.active or not route_manager.geometry:
+        if not route_manager.active or not route_manager.route_geometry:
             self.route_segments = []
             return
 
         # Build segments from route geometry
         self.route_segments = []
-        geometry = route_manager.geometry
+        geometry = route_manager.route_geometry
 
         # Extract lane count from maneuvers (with fallback to estimation)
         for i in range(len(geometry) - 1):
@@ -119,7 +119,7 @@ class GPSLaneTracker:
         # Try to find a better match if we have multiple maneuvers
         if len(route_manager.maneuvers) > 1:
             # Estimate which maneuver is closest to this segment
-            segment_ratio = segment_idx / max(1, len(route_manager.geometry) - 1)
+            segment_ratio = segment_idx / max(1, len(route_manager.route_geometry) - 1)
             maneuver_idx = min(
                 int(segment_ratio * len(route_manager.maneuvers)),
                 len(route_manager.maneuvers) - 1
