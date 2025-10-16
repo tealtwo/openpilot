@@ -353,12 +353,12 @@ class NavigationDaemon:
     def _map_direction(self, direction: str) -> int:
         # Map turnDirection string to enum
         direction_map = {
-            "none": custom.TurnDirection.none,
-            "straight": custom.TurnDirection.none,
-            "left": custom.TurnDirection.turnLeft,
-            "right": custom.TurnDirection.turnRight,
+            "none": custom.ModelDataV2SP.TurnDirection.none,
+            "straight": custom.ModelDataV2SP.TurnDirection.none,
+            "left": custom.ModelDataV2SP.TurnDirection.turnLeft,
+            "right": custom.ModelDataV2SP.TurnDirection.turnRight,
         }
-        return direction_map.get(direction, custom.TurnDirection.none)
+        return direction_map.get(direction, custom.ModelDataV2SP.TurnDirection.none)
 
     def step(self) -> None:
         # Update messaging
