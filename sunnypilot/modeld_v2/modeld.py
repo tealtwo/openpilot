@@ -183,7 +183,7 @@ class ModelState(ModelStateBase):
     from cereal import custom
 
     # Only enforce for active navigation turns
-    if nav_state is None or not nav_state.active or turn_direction == custom.TurnDirection.none:
+    if nav_state is None or not nav_state.active or turn_direction == custom.ModelDataV2SP.TurnDirection.none:
       return desired_curvature
 
     # Only enforce for turn desires (not lane changes or lane positioning)
@@ -192,12 +192,12 @@ class ModelState(ModelStateBase):
 
     # Proactively enforce when AT the intersection (<9m)
     if distance_to_turn < self.TURN_ENFORCEMENT_DISTANCE:
-      if turn_direction == custom.TurnDirection.turnLeft:
+      if turn_direction == custom.ModelDataV2SP.TurnDirection.turnLeft:
         # Enforce minimum left turn curvature (negative)
         if desired_curvature > -self.MIN_TURN_CURVATURE:
           cloudlog.debug(f"navd: Enforcing LEFT turn at {distance_to_turn:.1f}m: {desired_curvature:.6f} -> {-self.MIN_TURN_CURVATURE:.6f}")
           return -self.MIN_TURN_CURVATURE
-      elif turn_direction == custom.TurnDirection.turnRight:
+      elif turn_direction == custom.ModelDataV2SP.TurnDirection.turnRight:
         # Enforce minimum right turn curvature (positive)
         if desired_curvature < self.MIN_TURN_CURVATURE:
           cloudlog.debug(f"navd: Enforcing RIGHT turn at {distance_to_turn:.1f}m: {desired_curvature:.6f} -> {self.MIN_TURN_CURVATURE:.6f}")
@@ -254,7 +254,7 @@ def get_nav_turn_features(nav_state, turn_direction, model_input_size: int) -> n
   # Import here to avoid circular dependency
   from cereal import custom
 
-  if turn_direction == custom.TurnDirection.none:
+  if turn_direction == custom.ModelDataV2SP.TurnDirection.none:
     return features
 
   # Feature 0: Turn active flag (1.0 if turn is active)
@@ -262,9 +262,9 @@ def get_nav_turn_features(nav_state, turn_direction, model_input_size: int) -> n
     features[0] = 1.0
 
   # Feature 1: Turn direction (-1.0 for left, 1.0 for right)
-  if turn_direction == custom.TurnDirection.turnLeft:
+  if turn_direction == custom.ModelDataV2SP.TurnDirection.turnLeft:
     features[1] = -1.0
-  elif turn_direction == custom.TurnDirection.turnRight:
+  elif turn_direction == custom.ModelDataV2SP.TurnDirection.turnRight:
     features[1] = 1.0
 
   # Feature 2: Distance to turn (if available in nav_state)
