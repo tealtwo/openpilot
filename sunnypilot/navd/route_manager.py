@@ -80,6 +80,7 @@ class Maneuver:
     angle: Optional[float] = None  # Turn angle in degrees (for speed calculation)
     road_classes: Optional[List[str]] = None  # Road classification (e.g., ["motorway"], ["trunk"], [])
     next_road_classes: Optional[List[str]] = None  # Road classification of destination road after exit/turn
+    lane_count: Optional[int] = None  # Number of lanes on this road segment (from Mapbox intersections)
 
     def get_recommended_speed(self) -> Optional[float]:
         """
@@ -350,6 +351,21 @@ class RouteManager:
                     # Extract road classes for current road
                     road_classes = step.get("intersections", [{}])[0].get("classes", [])
 
+                    # Extract lane count from intersection data
+                    # Mapbox intersections can have 'lanes' array or 'out' field for lane count
+                    lane_count = None
+                    intersections = step.get("intersections", [])
+                    if intersections:
+                        first_intersection = intersections[0]
+                        # Try to get outbound lanes count
+                        if "out" in first_intersection:
+                            lane_count = first_intersection["out"]
+                        # Or count lanes array if present
+                        elif "lanes" in first_intersection:
+                            lanes = first_intersection["lanes"]
+                            if isinstance(lanes, list):
+                                lane_count = len(lanes)
+
                     # Extract road classes for NEXT road (for exit speed logic)
                     next_road_classes = None
                     if step_idx + 1 < len(all_steps):
@@ -367,7 +383,8 @@ class RouteManager:
                         description=instruction,
                         angle=angle,
                         road_classes=road_classes if road_classes else None,
-                        next_road_classes=next_road_classes
+                        next_road_classes=next_road_classes,
+                        lane_count=lane_count
                     )
 
                     maneuvers.append(maneuver)

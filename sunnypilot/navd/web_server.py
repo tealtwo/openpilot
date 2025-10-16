@@ -510,6 +510,41 @@ HTML_TEMPLATE = """
                     <span class="debug-value" id="debug-speed-valid">No</span>
                 </div>
             </div>
+
+            <div class="debug-section" style="border-left: 4px solid #FF9800;">
+                <div class="debug-header" style="color: #FF9800;">⚠️ LANE TRACKING (TESTING)</div>
+                <div class="debug-row">
+                    <span class="debug-label">Model Lane (ACTIVE):</span>
+                    <span class="debug-value" id="debug-model-lane">UNKNOWN</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Model Confidence:</span>
+                    <span class="debug-value" id="debug-model-conf">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">GPS Lane (TESTING):</span>
+                    <span class="debug-value" id="debug-gps-lane">UNKNOWN</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">GPS Confidence:</span>
+                    <span class="debug-value" id="debug-gps-conf">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Lateral Offset:</span>
+                    <span class="debug-value" id="debug-lateral-offset">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">GPS Accuracy:</span>
+                    <span class="debug-value" id="debug-gps-accuracy">N/A</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Agreement:</span>
+                    <span class="debug-value" id="debug-lane-agreement">N/A</span>
+                </div>
+                <div style="margin-top: 10px; padding: 10px; background-color: #fff3e0; border-radius: 5px; font-size: 12px; color: #666;">
+                    ℹ️ GPS lane tracking is in TESTING mode. Model remains the sole authority for lane positioning control.
+                </div>
+            </div>
         </div>
 
         <div id="status" class="status"></div>
@@ -638,6 +673,32 @@ HTML_TEMPLATE = """
                     ? `${status.target_speed.toFixed(1)} m/s (${(status.target_speed * 2.23694).toFixed(0)} mph)`
                     : 'N/A';
                 document.getElementById('debug-speed-valid').textContent = status.target_speed_valid ? 'Yes' : 'No';
+
+                // Update LANE TRACKING (TESTING)
+                if (status.lane_debug_info) {
+                    document.getElementById('debug-model-lane').textContent =
+                        (status.lane_debug_info.model_lane || 'UNKNOWN').toUpperCase();
+                    document.getElementById('debug-model-conf').textContent =
+                        status.lane_debug_info.model_confidence != null ?
+                        status.lane_debug_info.model_confidence.toFixed(2) : 'N/A';
+                    document.getElementById('debug-gps-lane').textContent =
+                        (status.lane_debug_info.gps_lane || 'UNKNOWN').toUpperCase();
+                    document.getElementById('debug-gps-conf').textContent =
+                        status.lane_debug_info.gps_confidence != null ?
+                        status.lane_debug_info.gps_confidence.toFixed(2) : 'N/A';
+                    document.getElementById('debug-lateral-offset').textContent =
+                        status.lane_debug_info.lateral_offset != null ?
+                        `${status.lane_debug_info.lateral_offset.toFixed(2)}m` : 'N/A';
+                    document.getElementById('debug-gps-accuracy').textContent =
+                        status.lane_debug_info.gps_accuracy != null ?
+                        `${status.lane_debug_info.gps_accuracy.toFixed(1)}m` : 'N/A';
+
+                    const agreement = status.lane_debug_info.agreement;
+                    document.getElementById('debug-lane-agreement').textContent =
+                        agreement ? '✓ AGREE' : '✗ DISAGREE';
+                    document.getElementById('debug-lane-agreement').style.color =
+                        agreement ? '#4CAF50' : '#f44336';
+                }
 
             } catch (error) {
                 console.error('Failed to update debug panel:', error);
@@ -1064,6 +1125,15 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                 'lane_positioning_direction': None,
                 'target_speed_valid': False,
                 'target_speed': None,
+                'lane_debug_info': {
+                    'model_lane': 'unknown',
+                    'model_confidence': 0.0,
+                    'gps_lane': 'unknown',
+                    'gps_confidence': 0.0,
+                    'lateral_offset': 0.0,
+                    'gps_accuracy': 0.0,
+                    'agreement': False,
+                }
             }
 
             # Get GPS position
@@ -1117,6 +1187,19 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                 if nav.targetSpeedValid:
                     status['target_speed_valid'] = True
                     status['target_speed'] = nav.targetSpeed
+
+                # Extract lane tracking debug info (model vs GPS comparison)
+                if hasattr(nav, 'laneDebugInfo'):
+                    debug_info = nav.laneDebugInfo
+                    status['lane_debug_info'] = {
+                        'model_lane': debug_info.modelLane,
+                        'model_confidence': debug_info.modelConfidence,
+                        'gps_lane': debug_info.gpsLane,
+                        'gps_confidence': debug_info.gpsConfidence,
+                        'lateral_offset': debug_info.lateralOffset,
+                        'gps_accuracy': debug_info.gpsAccuracy,
+                        'agreement': debug_info.agreement,
+                    }
 
             self._send_json_response(status)
 

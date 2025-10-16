@@ -11,6 +11,7 @@ from openpilot.common.realtime import Ratekeeper, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.sunnypilot.navd.helpers import Coordinate, detect_lane_position, LanePosition
 from openpilot.sunnypilot.navd.route_manager import RouteManager
+from openpilot.sunnypilot.navd.gps_lane_tracker import GPSLaneTracker
 
 
 # MAPBOX API TOKEN
@@ -38,12 +39,26 @@ class NavigationDaemon:
         # Route manager
         self.route_manager = RouteManager(routing_backend="mapbox", mapbox_token=mapbox_token)
 
+        # GPS lane tracker (observation mode - testing only)
+        self.gps_lane_tracker = GPSLaneTracker()
+
         # State
         self.current_position: Coordinate | None = None
         self.last_bearing: float | None = None
         self.localizer_valid = False
         self.v_ego: float = 0.0  # Current vehicle speed in m/s
         self.current_lane_position: LanePosition = LanePosition.UNKNOWN  # Current detected lane position
+
+        # Lane tracking debug info for web UI
+        self.lane_debug_info: dict = {
+            'model_lane': 'unknown',
+            'model_confidence': 0.0,
+            'gps_lane': 'unknown',
+            'gps_confidence': 0.0,
+            'lateral_offset': 0.0,
+            'gps_accuracy': 0.0,
+            'agreement': False,
+        }
 
         # Destination tracking
         self.last_destination_json = ""
@@ -182,6 +197,9 @@ class NavigationDaemon:
             if self.route_manager.active and self.current_position:
                 self.route_manager.update_position(self.current_position)
 
+                # Update GPS lane tracker with route data
+                self.gps_lane_tracker.update_from_route(self.route_manager)
+
                 # Check if arrived at destination
                 if self.route_manager.check_arrival(self.current_position):
                     cloudlog.info(f"navd: Auto-ending navigation - arrived at {self.route_manager.destination_name}")
@@ -190,12 +208,105 @@ class NavigationDaemon:
                     self.last_destination_json = ""  # Clear destination tracking
 
     def update_lane_position(self) -> None:
-        """Update current lane position from modelV2."""
+        """
+        Update current lane position from MULTIPLE sources.
+
+        MODEL-BASED (ACTIVE): Primary source, controls lane positioning
+        GPS-BASED (TESTING): Secondary source, for validation only
+
+        Both sources are tracked and logged for comparison and validation.
+        """
+        # MODEL-BASED DETECTION (ACTIVE - controls lane positioning)
+        model_lane = LanePosition.UNKNOWN
+        model_confidence = 0.0
+
         if 'modelV2' in self.sm.valid and self.sm.valid['modelV2']:
             model_v2 = self.sm['modelV2']
-            self.current_lane_position = detect_lane_position(model_v2)
-        else:
-            self.current_lane_position = LanePosition.UNKNOWN
+            model_lane = detect_lane_position(model_v2)
+            # Calculate model confidence from lane line probabilities
+            model_confidence = self._calculate_model_confidence(model_v2)
+
+        # USE MODEL AS SOLE AUTHORITY (no fusion yet)
+        self.current_lane_position = model_lane
+
+        # GPS-BASED DETECTION (TESTING - observation only)
+        gps_lane = LanePosition.UNKNOWN
+        gps_confidence = 0.0
+        lateral_offset = 0.0
+
+        if self.route_manager.active and self.current_position and self.localizer_valid:
+            # Get GPS accuracy from liveLocationKalman
+            location = self.sm['liveLocationKalman']
+            gps_accuracy = 5.0  # Default
+            if location.positionGeodetic.valid and hasattr(location.positionGeodetic, 'std'):
+                # Standard deviation gives position uncertainty
+                gps_accuracy = max(location.positionGeodetic.std[0], location.positionGeodetic.std[1])
+
+            # Calculate GPS-based lane estimate
+            gps_lane, gps_confidence, lateral_offset = self.gps_lane_tracker.calculate_lane_position(
+                self.current_position,
+                self.last_bearing if self.last_bearing else 0.0,
+                gps_accuracy
+            )
+
+        # Check agreement between sources
+        agreement = (model_lane == gps_lane) and (model_lane != LanePosition.UNKNOWN)
+
+        # Update debug info for web UI
+        self.lane_debug_info = {
+            'model_lane': model_lane.value,
+            'model_confidence': float(model_confidence),
+            'gps_lane': gps_lane.value,
+            'gps_confidence': float(gps_confidence),
+            'lateral_offset': float(lateral_offset),
+            'gps_accuracy': float(gps_accuracy) if self.route_manager.active else 0.0,
+            'agreement': bool(agreement),
+        }
+
+        # Log disagreements and periodic status (every 5 seconds at 5Hz = 25 frames)
+        if not agreement or self.sm.frame % 25 == 0:
+            if self.route_manager.active:  # Only log when navigation is active
+                cloudlog.info(
+                    f"navd: Lane tracking - "
+                    f"Model: {model_lane.value} (conf: {model_confidence:.2f}), "
+                    f"GPS: {gps_lane.value} (conf: {gps_confidence:.2f}), "
+                    f"Offset: {lateral_offset:.2f}m, "
+                    f"Agree: {agreement}"
+                )
+
+    def _calculate_model_confidence(self, model_v2) -> float:
+        """
+        Calculate confidence score for model-based lane detection.
+
+        Factors:
+        - Lane line probabilities
+        - Number of visible lane lines
+        - Distance validation (not curbs/edges)
+
+        Returns:
+            Confidence score 0.0-1.0
+        """
+        if not model_v2 or not hasattr(model_v2, 'laneLineProbs') or len(model_v2.laneLineProbs) < 3:
+            return 0.0
+
+        # Get lane line probabilities
+        left_prob = model_v2.laneLineProbs[1] if len(model_v2.laneLineProbs) > 1 else 0.0
+        right_prob = model_v2.laneLineProbs[2] if len(model_v2.laneLineProbs) > 2 else 0.0
+
+        # Average of visible lane line probabilities
+        max_prob = max(left_prob, right_prob)
+        avg_prob = (left_prob + right_prob) / 2.0
+
+        # If both lines visible with high confidence, return average
+        if left_prob > 0.5 and right_prob > 0.5:
+            return avg_prob
+
+        # If only one line visible, use that probability but reduce confidence
+        if max_prob > 0.5:
+            return max_prob * 0.7
+
+        # Low confidence - no clear lane lines
+        return max_prob * 0.5
 
     def check_destination_update(self) -> None:
         # Check if new destination has been set via params
@@ -332,6 +443,16 @@ class NavigationDaemon:
             nav_state.shouldSendTurnDesire = False
             nav_state.shouldSendLanePositioning = False
             nav_state.targetSpeedValid = False
+
+        # Lane tracking debug info (for web UI)
+        debug_info = nav_state.laneDebugInfo
+        debug_info.modelLane = self.lane_debug_info['model_lane']
+        debug_info.modelConfidence = self.lane_debug_info['model_confidence']
+        debug_info.gpsLane = self.lane_debug_info['gps_lane']
+        debug_info.gpsConfidence = self.lane_debug_info['gps_confidence']
+        debug_info.lateralOffset = self.lane_debug_info['lateral_offset']
+        debug_info.gpsAccuracy = self.lane_debug_info['gps_accuracy']
+        debug_info.agreement = self.lane_debug_info['agreement']
 
         # Send message
         self.pm.send('navStateSP', msg)

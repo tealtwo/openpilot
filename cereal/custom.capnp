@@ -499,6 +499,9 @@ struct NavStateSP @0xcb9fd56c7057593a {
   shouldSendLanePositioning @18 :Bool;      # Whether to send lane positioning desires (keepLeft/keepRight)
   lanePositioningDirection @19 :ModelDataV2SP.TurnDirection;  # Direction for lane positioning
 
+  # Lane tracking debug info (model vs GPS comparison for testing)
+  laneDebugInfo @20 :LaneDebugInfo;
+
   enum ManeuverType {
     none @0;
     turn @1;              # Regular turn at intersection
@@ -508,6 +511,16 @@ struct NavStateSP @0xcb9fd56c7057593a {
     continueStraight @5;  # Continue straight
     arrive @6;            # Arrive at destination
     roundabout @7;        # Enter/exit roundabout
+  }
+
+  struct LaneDebugInfo {
+    modelLane @0 :Text;             # "left", "middle", "right", "unknown"
+    modelConfidence @1 :Float32;     # 0.0-1.0
+    gpsLane @2 :Text;                # "left", "middle", "right", "unknown"
+    gpsConfidence @3 :Float32;       # 0.0-1.0
+    lateralOffset @4 :Float32;       # Meters from road centerline (negative=left, positive=right)
+    gpsAccuracy @5 :Float32;         # GPS position accuracy (meters)
+    agreement @6 :Bool;              # Do model and GPS agree?
   }
 }
 
