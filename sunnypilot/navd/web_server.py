@@ -552,6 +552,7 @@ HTML_TEMPLATE = """
 
     <script>
         let debugInterval = null;
+        let routesInterval = null;
 
         function switchTab(tab) {
             // Hide all tabs
@@ -789,8 +790,6 @@ HTML_TEMPLATE = """
         }
 
         // Routes Tab Functions
-        let routesInterval = null;
-
         async function loadRouteAlternatives() {
             try {
                 const response = await fetch('/route_alternatives');
@@ -1191,13 +1190,20 @@ class NavigationWebServer(BaseHTTPRequestHandler):
                 # Extract lane tracking debug info (model vs GPS comparison)
                 if hasattr(nav, 'laneDebugInfo'):
                     debug_info = nav.laneDebugInfo
+
+                    # Helper to convert NaN to None (null in JSON)
+                    def safe_float(value):
+                        if value is None or (isinstance(value, float) and math.isnan(value)):
+                            return None
+                        return value
+
                     status['lane_debug_info'] = {
-                        'model_lane': debug_info.modelLane,
-                        'model_confidence': debug_info.modelConfidence,
-                        'gps_lane': debug_info.gpsLane,
-                        'gps_confidence': debug_info.gpsConfidence,
-                        'lateral_offset': debug_info.lateralOffset,
-                        'gps_accuracy': debug_info.gpsAccuracy,
+                        'model_lane': debug_info.modelLane if debug_info.modelLane else 'unknown',
+                        'model_confidence': safe_float(debug_info.modelConfidence),
+                        'gps_lane': debug_info.gpsLane if debug_info.gpsLane else 'unknown',
+                        'gps_confidence': safe_float(debug_info.gpsConfidence),
+                        'lateral_offset': safe_float(debug_info.lateralOffset),
+                        'gps_accuracy': safe_float(debug_info.gpsAccuracy),
                         'agreement': debug_info.agreement,
                     }
 

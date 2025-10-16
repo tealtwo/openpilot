@@ -252,14 +252,20 @@ class NavigationDaemon:
         # Check agreement between sources
         agreement = (model_lane == gps_lane) and (model_lane != LanePosition.UNKNOWN)
 
+        # Helper to safely convert floats, replacing NaN with 0.0
+        def safe_float(value):
+            if value is None or (isinstance(value, float) and math.isnan(value)):
+                return 0.0
+            return float(value)
+
         # Update debug info for web UI
         self.lane_debug_info = {
             'model_lane': model_lane.value,
-            'model_confidence': float(model_confidence),
+            'model_confidence': safe_float(model_confidence),
             'gps_lane': gps_lane.value,
-            'gps_confidence': float(gps_confidence),
-            'lateral_offset': float(lateral_offset),
-            'gps_accuracy': float(gps_accuracy) if self.route_manager.active else 0.0,
+            'gps_confidence': safe_float(gps_confidence),
+            'lateral_offset': safe_float(lateral_offset),
+            'gps_accuracy': safe_float(gps_accuracy) if self.route_manager.active else 0.0,
             'agreement': bool(agreement),
         }
 
