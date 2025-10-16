@@ -69,7 +69,7 @@ class ModelState(ModelStateBase):
 
     # Turn enforcement for navigation turns
     self.MIN_TURN_CURVATURE = 0.0008  # Minimum curvature to enforce during turns
-    self.TURN_ENFORCEMENT_DISTANCE = 9.0  # Distance (meters) at which to proactively enforce turn AT the intersection
+    self.TURN_ENFORCEMENT_DISTANCE = 12.0  # Distance (meters) at which to proactively enforce turn AT the intersection
 
     # img buffers are managed in openCL transform code
     self.numpy_inputs = {}
