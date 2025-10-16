@@ -479,12 +479,12 @@ struct NavStateSP @0xcb9fd56c7057593a {
   nextManeuverValid @6 :Bool;               # Whether next maneuver data is valid
   nextManeuverDistance @7 :Float32;         # Distance to next maneuver (m)
   nextManeuverType @8 :ManeuverType;        # Type of next maneuver
-  nextManeuverDirection @9 :TurnDirection;  # Direction for next maneuver
+  nextManeuverDirection @9 :ModelDataV2SP.TurnDirection;  # Direction for next maneuver
   nextManeuverDescription @10 :Text;        # Human-readable maneuver description
 
   # Turn desire control for lateral planning
   shouldSendTurnDesire @11 :Bool;           # Whether to send turn desires to model
-  turnDesireDirection @12 :TurnDirection;   # Direction for turn desire
+  turnDesireDirection @12 :ModelDataV2SP.TurnDirection;   # Direction for turn desire
 
   # Speed guidance for longitudinal planning
   targetSpeed @13 :Float32;                 # Target speed for upcoming maneuver (m/s)
@@ -497,7 +497,7 @@ struct NavStateSP @0xcb9fd56c7057593a {
 
   # Lane positioning guidance for exits/turns
   shouldSendLanePositioning @18 :Bool;      # Whether to send lane positioning desires (keepLeft/keepRight)
-  lanePositioningDirection @19 :TurnDirection;  # Direction for lane positioning
+  lanePositioningDirection @19 :ModelDataV2SP.TurnDirection;  # Direction for lane positioning
 
   enum ManeuverType {
     none @0;
