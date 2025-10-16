@@ -163,7 +163,7 @@ def get_nav_turn_features(nav_state, turn_direction, model_input_size: int) -> n
   # Import here to avoid circular dependency
   from cereal import custom
 
-  if turn_direction == custom.TurnDirection.none:
+  if turn_direction == custom.ModelDataV2SP.TurnDirection.none:
     return features
 
   # Feature 0: Turn active flag (1.0 if turn is active)
@@ -171,9 +171,9 @@ def get_nav_turn_features(nav_state, turn_direction, model_input_size: int) -> n
     features[0] = 1.0
 
   # Feature 1: Turn direction (-1.0 for left, 1.0 for right)
-  if turn_direction == custom.TurnDirection.turnLeft:
+  if turn_direction == custom.ModelDataV2SP.TurnDirection.turnLeft:
     features[1] = -1.0
-  elif turn_direction == custom.TurnDirection.turnRight:
+  elif turn_direction == custom.ModelDataV2SP.TurnDirection.turnRight:
     features[1] = 1.0
 
   # Feature 2: Distance to turn (if available in nav_state)
