@@ -14,22 +14,22 @@ from openpilot.sunnypilot.navd.helpers import Coordinate, distance_along_geometr
 # Thresholds for turn desire triggering - DYNAMIC DISTANCES
 # These replace the old fixed TURN_DESIRE_START_DISTANCE = 100.0
 # Distances based on turn angle, direction, and maneuver type
-TURN_DESIRE_END_DISTANCE = 0.0      # meters - stop sending turn desires after passing (immediate cutoff)
+TURN_DESIRE_END_DISTANCE = 20.0      # meters - stop sending turn desires after passing (immediate cutoff)
 MANEUVER_COMPLETION_THRESHOLD = 30.0  # meters - consider maneuver completed
 
 # Dynamic turn desire distances by turn angle (degrees)
 # Left turns get 5m more than right turns (complexity factor for crossing traffic)
-TURN_DESIRE_SHARP_LEFT = 40.0       # < 60 degrees
-TURN_DESIRE_SHARP_RIGHT = 35.0
-TURN_DESIRE_MODERATE_LEFT = 35.0    # 60-100 degrees
-TURN_DESIRE_MODERATE_RIGHT = 30.0
-TURN_DESIRE_GENTLE_LEFT = 30.0      # 100-140 degrees
-TURN_DESIRE_GENTLE_RIGHT = 25.0
-TURN_DESIRE_VERY_GENTLE = 20.0      # > 140 degrees (same for both left/right)
+TURN_DESIRE_SHARP_LEFT = 80.0       # < 60 degrees
+TURN_DESIRE_SHARP_RIGHT = 65.0
+TURN_DESIRE_MODERATE_LEFT = 55.0    # 60-100 degrees
+TURN_DESIRE_MODERATE_RIGHT = 50.0
+TURN_DESIRE_GENTLE_LEFT = 45.0      # 100-140 degrees
+TURN_DESIRE_GENTLE_RIGHT = 40.0
+TURN_DESIRE_VERY_GENTLE = 35.0      # > 140 degrees (same for both left/right)
 
 # Special maneuver type distances
-TURN_DESIRE_EXIT = 50.0             # Highway exits need more distance
-TURN_DESIRE_ROUNDABOUT = 30.0       # Roundabouts - moderate distance
+TURN_DESIRE_EXIT = 80.0             # Highway exits need more distance
+TURN_DESIRE_ROUNDABOUT = 50.0       # Roundabouts - moderate distance
 
 # Bonuses for special conditions
 TURN_DESIRE_HIGHWAY_BONUS = 5.0     # +5m if on highway (higher speeds)
@@ -41,7 +41,7 @@ TURN_DESIRE_SPEED_BONUS_2 = 10.0    # +10m at 45 mph
 # Thresholds for lane positioning guidance
 LANE_POSITIONING_START_DISTANCE = 1600.0  # meters (~1 mile) - start suggesting lane changes
 LANE_POSITIONING_END_DISTANCE = 50.0      # meters - stop lane positioning (should have moved earlier)
-# Note: Lane positioning stops at 50m. Turn desires start dynamically (20-50m) and take priority via desire hierarchy.
+# Note: Lane positioning stops at 50m. Turn desires start dynamically (20-80m) and take priority via desire hierarchy.
 
 # Turn sharpness thresholds (degrees) for speed recommendations
 SHARP_TURN_ANGLE = 60.0    # < 60 degrees is sharp
