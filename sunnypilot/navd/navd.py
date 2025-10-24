@@ -413,6 +413,7 @@ class NavigationDaemon:
                 nav_state.nextManeuverType = self._map_maneuver_type(next_maneuver.type)
                 nav_state.nextManeuverDirection = self._map_direction(next_maneuver.direction)
                 nav_state.nextManeuverDescription = next_maneuver.description
+                nav_state.nextManeuverAngle = float(next_maneuver.angle) if next_maneuver.angle is not None else 0.0
             else:
                 nav_state.nextManeuverValid = False
 

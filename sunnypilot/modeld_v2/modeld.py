@@ -67,9 +67,21 @@ class ModelState(ModelStateBase):
     self.frames = {name: DrivingModelFrame(context, buffer_length) for name in self.model_runner.vision_input_names}
     self.prev_desire = np.zeros(self.constants.DESIRE_LEN, dtype=np.float32)
 
-    # Turn enforcement for navigation turns
-    self.MIN_TURN_CURVATURE = 0.0008  # Minimum curvature to enforce during turns
-    self.TURN_ENFORCEMENT_DISTANCE = 12.0  # Distance (meters) at which to proactively enforce turn AT the intersection
+    # Turn enforcement for navigation turns - angle-adaptive
+    self.TURN_ENFORCEMENT_DISTANCE = 14.0  # Distance (meters) at which to proactively enforce turn AT the intersection
+
+    # Angle-based turn curvature enforcement thresholds
+    # Curvature = 1 / turn_radius (in meters)
+    self.SHARP_TURN_ANGLE = 60.0       # < 60° is sharp turn
+    self.MODERATE_TURN_ANGLE = 100.0   # 60-100° is moderate turn
+    self.GENTLE_TURN_ANGLE = 140.0     # 100-140° is gentle turn
+    # > 140° is very gentle/straight
+
+    # Minimum curvatures by turn sharpness
+    self.CURVATURE_SHARP = 0.10        # Sharp turns: 10m radius (residential 90° turns)
+    self.CURVATURE_MODERATE = 0.06     # Moderate turns: 16.7m radius
+    self.CURVATURE_GENTLE = 0.03       # Gentle turns: 33m radius
+    self.CURVATURE_VERY_GENTLE = 0.015 # Very gentle: 66.7m radius (highway exits)
 
     # img buffers are managed in openCL transform code
     self.numpy_inputs = {}
@@ -163,13 +175,25 @@ class ModelState(ModelStateBase):
     if self.mlsim:
       self.numpy_inputs[input_name_prev][:] = 0*self.temporal_buffers[input_name_prev][0, self.temporal_idxs_map[input_name_prev]]
 
+  def get_min_turn_curvature(self, turn_angle: float) -> float:
+    abs_angle = abs(turn_angle)
+
+    if abs_angle < self.SHARP_TURN_ANGLE:
+      return self.CURVATURE_SHARP
+    elif abs_angle < self.MODERATE_TURN_ANGLE:
+      return self.CURVATURE_MODERATE
+    elif abs_angle < self.GENTLE_TURN_ANGLE:
+      return self.CURVATURE_GENTLE
+    else:
+      return self.CURVATURE_VERY_GENTLE
+
   def apply_nav_turn_enforcement(self, desired_curvature: float, nav_state, turn_direction,
                                   distance_to_turn: float) -> float:
     """
     Proactively enforce minimum curvature during navigation turns to prevent backing out.
 
-    When within 9m of turn AND turn desire is active, force minimum curvature to ensure
-    the turn executes even if model tries to back out.
+    Use adaptive angle curvature enforcement, sharper turns get stronger curvature enforcement.
+    When within enforcement distance AND turn desire is active, enforce minimum curvature to ensure the turn executes, even if model is unsure.
 
     Args:
       desired_curvature: Curvature output from model
@@ -190,18 +214,25 @@ class ModelState(ModelStateBase):
     if not nav_state.shouldSendTurnDesire:
       return desired_curvature
 
-    # Proactively enforce when AT the intersection (<9m)
+    # Proactively enforce when AT the intersection
     if distance_to_turn < self.TURN_ENFORCEMENT_DISTANCE:
+      # Get turn angle from nav_state (0.0 if not available)
+      turn_angle = nav_state.nextManeuverAngle if hasattr(nav_state, 'nextManeuverAngle') else 0.0
+
+      # Get angle-adaptive minimum curvature
+      min_curvature = self.get_min_turn_curvature(turn_angle)
+
       if turn_direction == custom.ModelDataV2SP.TurnDirection.turnLeft:
-        # Enforce minimum left turn curvature (negative)
-        if desired_curvature > -self.MIN_TURN_CURVATURE:
-          cloudlog.debug(f"navd: Enforcing LEFT turn at {distance_to_turn:.1f}m: {desired_curvature:.6f} -> {-self.MIN_TURN_CURVATURE:.6f}")
-          return -self.MIN_TURN_CURVATURE
+        # Enforce minimum left turn curvature
+        if desired_curvature > -min_curvature:
+          cloudlog.debug(f"navd: Enforcing LEFT turn at {distance_to_turn:.1f}m, angle {turn_angle:.0f}°: "
+                        f"{desired_curvature:.6f} -> {-min_curvature:.6f}")
+          return -min_curvature
       elif turn_direction == custom.ModelDataV2SP.TurnDirection.turnRight:
-        # Enforce minimum right turn curvature (positive)
-        if desired_curvature < self.MIN_TURN_CURVATURE:
-          cloudlog.debug(f"navd: Enforcing RIGHT turn at {distance_to_turn:.1f}m: {desired_curvature:.6f} -> {self.MIN_TURN_CURVATURE:.6f}")
-          return self.MIN_TURN_CURVATURE
+        if desired_curvature < min_curvature:
+          cloudlog.debug(f"navd: Enforcing RIGHT turn at {distance_to_turn:.1f}m, angle {turn_angle:.0f}°: "
+                        f"{desired_curvature:.6f} -> {min_curvature:.6f}")
+          return min_curvature
 
     return desired_curvature
 

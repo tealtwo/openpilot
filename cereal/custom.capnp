@@ -481,6 +481,7 @@ struct NavStateSP @0xcb9fd56c7057593a {
   nextManeuverType @8 :ManeuverType;        # Type of next maneuver
   nextManeuverDirection @9 :ModelDataV2SP.TurnDirection;  # Direction for next maneuver
   nextManeuverDescription @10 :Text;        # Human-readable maneuver description
+  nextManeuverAngle @21 :Float32;           # Turn angle in degrees (for angle-adaptive enforcement)
 
   # Turn desire control for lateral planning
   shouldSendTurnDesire @11 :Bool;           # Whether to send turn desires to model
