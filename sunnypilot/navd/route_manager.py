@@ -962,21 +962,62 @@ class RouteManager:
             influence_distance = 100.0
 
         # Only provide speed recommendation when within influence zone
-        if 0 <= distance_to_maneuver <= influence_distance:
-            # Log when speed influence state changes
-            if not self.last_speed_influence_active or target_speed != self.last_target_speed:
-                cloudlog.info(f"navd: 🎯 SPEED INFLUENCE ACTIVE - Target: {target_speed:.1f} m/s ({target_speed * 2.237:.0f} mph) | "
-                             f"Distance: {distance_to_maneuver:.0f}m | Influence zone: {influence_distance:.0f}m | "
-                             f"Maneuver: {maneuver.type} - {maneuver.description}")
-                self.last_speed_influence_active = True
-                self.last_target_speed = target_speed
-            return target_speed
-        else:
-            # Outside influence zone - clear speed influence
+        if distance_to_maneuver < 0 or distance_to_maneuver > influence_distance:
+            # Outside influence zone clear speed influence
             if self.last_speed_influence_active:
                 self.last_speed_influence_active = False
                 cloudlog.info("navd: ✓ Speed influence cleared (outside influence zone)")
             return None
+
+        if v_current <= target_speed:
+            if not self.last_speed_influence_active or abs(target_speed - self.last_target_speed) > 0.5:
+                cloudlog.info(f"navd: 🎯 SPEED INFLUENCE ACTIVE (no ramp) - Target: {target_speed:.1f} m/s ({target_speed * 2.237:.0f} mph) | "
+                             f"Distance: {distance_to_maneuver:.0f}m | Already at/below target | "
+                             f"Maneuver: {maneuver.type} - {maneuver.description}")
+                self.last_speed_influence_active = True
+                self.last_target_speed = target_speed
+            return target_speed
+
+        RAMP_COMPLETION_DISTANCE = 20.0 # meters
+        STEEP_ZONE_RATIO = 0.3 # percentage scaled
+
+        speed_delta = v_current - target_speed
+        v_ramp_start = target_speed + (0.5 * speed_delta)  # Start 50% above target
+        total_drop = 0.5 * speed_delta
+
+        ramp_distance = influence_distance - RAMP_COMPLETION_DISTANCE
+        steep_zone_length = ramp_distance * STEEP_ZONE_RATIO
+        steep_start_distance = RAMP_COMPLETION_DISTANCE + steep_zone_length
+
+        # speed ramp zone calc
+
+        v_zone1_end = v_ramp_start - (0.25 * total_drop)
+
+        if distance_to_maneuver > steep_start_distance:
+            gentle_zone_length = influence_distance - steep_start_distance
+            if gentle_zone_length > 0:
+                ratio = (distance_to_maneuver - steep_start_distance) / gentle_zone_length
+                v_ramped = v_zone1_end + (v_ramp_start - v_zone1_end) * ratio
+            else:
+                v_ramped = v_zone1_end
+
+        elif distance_to_maneuver > RAMP_COMPLETION_DISTANCE:
+            ratio = (distance_to_maneuver - RAMP_COMPLETION_DISTANCE) / steep_zone_length
+            v_ramped = target_speed + (v_zone1_end - target_speed) * ratio
+
+        else:
+            v_ramped = target_speed
+
+        if not self.last_speed_influence_active or abs(v_ramped - self.last_target_speed) > 0.5:
+            cloudlog.info(f"navd: 🎯 SPEED INFLUENCE ACTIVE (ramped) - "
+                         f"Target: {target_speed:.1f} m/s ({target_speed * 2.237:.0f} mph) | "
+                         f"Ramped: {v_ramped:.1f} m/s ({v_ramped * 2.237:.0f} mph) | "
+                         f"Distance: {distance_to_maneuver:.0f}m | Influence: {influence_distance:.0f}m | "
+                         f"Maneuver: {maneuver.type} - {maneuver.description}")
+            self.last_speed_influence_active = True
+            self.last_target_speed = v_ramped
+
+        return v_ramped
 
     def _check_and_reroute(self, current_pos: Coordinate) -> None:
         """
