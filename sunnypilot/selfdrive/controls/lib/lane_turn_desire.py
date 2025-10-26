@@ -27,6 +27,10 @@ class LaneTurnController:
     self.nav_turn_direction = TurnDirection.none
     self.nav_enabled = False
 
+    # Navigation-based lane change desires (for highway exits >45mph)
+    self.nav_lane_change_direction = TurnDirection.none
+    self.nav_lane_change_enabled = False
+
     # Navigation-based lane positioning
     self.nav_lane_positioning_direction = TurnDirection.none
     self.nav_lane_positioning_enabled = False
@@ -76,6 +80,27 @@ class LaneTurnController:
       self.nav_turn_direction = TurnDirection.none
       self.nav_enabled = False
 
+  def update_nav_lane_change(self, nav_state) -> None:
+    if not nav_state:
+      self.nav_lane_change_direction = TurnDirection.none
+      self.nav_lane_change_enabled = False
+      return
+
+    # Check if navigation wants to send lane change desires
+    if nav_state.active and nav_state.shouldSendLaneChangeDesire:
+      # Convert capnp enum integer to TurnDirection enum
+      lane_change_dir_int = nav_state.laneChangeDesireDirection
+      if lane_change_dir_int == TurnDirection.turnLeft:
+        self.nav_lane_change_direction = TurnDirection.turnLeft
+      elif lane_change_dir_int == TurnDirection.turnRight:
+        self.nav_lane_change_direction = TurnDirection.turnRight
+      else:
+        self.nav_lane_change_direction = TurnDirection.none
+      self.nav_lane_change_enabled = True
+    else:
+      self.nav_lane_change_direction = TurnDirection.none
+      self.nav_lane_change_enabled = False
+
   def update_nav_lane_positioning(self, nav_state) -> None:
     """
     Update lane positioning direction based on navigation state.
@@ -113,6 +138,17 @@ class LaneTurnController:
 
     if self.nav_lane_positioning_enabled and self.nav_lane_positioning_direction != TurnDirection.none:
       return self.nav_lane_positioning_direction
+
+    return TurnDirection.none
+
+  def get_lane_change_direction(self):
+    """Get navigation lane change direction (for highway exits >45mph)."""
+    if not self.enabled:
+      return TurnDirection.none
+
+    # Lane change desires for high-speed exits
+    if self.nav_lane_change_enabled and self.nav_lane_change_direction != TurnDirection.none:
+      return self.nav_lane_change_direction
 
     return TurnDirection.none
 

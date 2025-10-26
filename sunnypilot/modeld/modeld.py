@@ -343,6 +343,8 @@ def main(demo=False):
     # Use alive instead of valid - messages are flowing but SubMaster validation may be strict
     nav_state = sm['navStateSP'] if sm.alive['navStateSP'] else None
     DH.lane_turn_controller.update_nav_turn(nav_state)
+    # Update navigation lane change desires (for highway exits >45mph)
+    DH.lane_turn_controller.update_nav_lane_change(nav_state)
     # Update navigation lane positioning desires (for early lane positioning before exits/turns)
     DH.lane_turn_controller.update_nav_lane_positioning(nav_state)
 

@@ -487,6 +487,10 @@ struct NavStateSP @0xcb9fd56c7057593a {
   shouldSendTurnDesire @11 :Bool;           # Whether to send turn desires to model
   turnDesireDirection @12 :ModelDataV2SP.TurnDirection;   # Direction for turn desire
 
+  # Lane change desire control for highway exits/ramps (>45 mph)
+  shouldSendLaneChangeDesire @22 :Bool;     # Whether to send lane change desires for high-speed exits
+  laneChangeDesireDirection @23 :ModelDataV2SP.TurnDirection;  # Direction for lane change desire
+
   # Speed guidance for longitudinal planning
   targetSpeed @13 :Float32;                 # Target speed for upcoming maneuver (m/s)
   targetSpeedValid @14 :Bool;               # Whether target speed is valid

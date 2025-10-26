@@ -44,6 +44,12 @@ LANE_POSITIONING_DESIRES = {
   TurnDirection.turnRight: log.Desire.keepRight,
 }
 
+NAV_LANE_CHANGE_DESIRES = {
+  TurnDirection.none: log.Desire.none,
+  TurnDirection.turnLeft: log.Desire.laneChangeLeft,
+  TurnDirection.turnRight: log.Desire.laneChangeRight,
+}
+
 
 class DesireHelper:
   def __init__(self):
@@ -57,6 +63,7 @@ class DesireHelper:
     self.alc = AutoLaneChangeController(self)
     self.lane_turn_controller = LaneTurnController(self)
     self.lane_turn_direction = TurnDirection.none
+    self.nav_lane_change_direction = TurnDirection.none
     self.lane_positioning_direction = TurnDirection.none
 
   @staticmethod
@@ -74,6 +81,9 @@ class DesireHelper:
     self.lane_turn_controller.update_lane_turn(blindspot_left=carstate.leftBlindspot, blindspot_right=carstate.rightBlindspot,
                                                left_blinker=carstate.leftBlinker, right_blinker=carstate.rightBlinker, v_ego=v_ego)
     self.lane_turn_direction = self.lane_turn_controller.get_turn_direction()
+
+    # Nav lane change controller update (for highway exits >45mph)
+    self.nav_lane_change_direction = self.lane_turn_controller.get_lane_change_direction()
 
     # Lane positioning controller update (for early positioning before exits/turns)
     self.lane_positioning_direction = self.lane_turn_controller.get_lane_positioning_direction()
@@ -138,14 +148,18 @@ class DesireHelper:
     self.prev_one_blinker = one_blinker
 
     # Desire priority:
-    # 1. Turn desires (highest) - actual turns at intersections
-    # 2. Lane change desires (medium) - manual lane changes or auto lane changes
-    # 3. Lane positioning desires (lowest) - early positioning for exits/turns
+    # 1. Turn desires (highest) - actual turns at intersections (<45 mph)
+    # 2. Nav lane change desires (high) - highway exits/ramps at >45 mph
+    # 3. Manual lane change desires (medium) - blinker-based lane changes
+    # 4. Lane positioning desires (lowest) - early positioning for exits/turns
     if self.lane_turn_direction != TurnDirection.none:
       # Turn desires take highest priority
       self.desire = TURN_DESIRES[self.lane_turn_direction]
+    elif self.nav_lane_change_direction != TurnDirection.none:
+      # Nav lane change desires (highway exits at high speed)
+      self.desire = NAV_LANE_CHANGE_DESIRES[self.nav_lane_change_direction]
     elif self.lane_change_state != LaneChangeState.off:
-      # Lane change desires take second priority
+      # Manual lane change desires (blinker-based)
       self.desire = DESIRES[self.lane_change_direction][self.lane_change_state]
     elif self.lane_positioning_direction != TurnDirection.none:
       # Lane positioning desires take lowest priority (only when not turning or changing lanes)

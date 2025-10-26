@@ -723,6 +723,16 @@ class RouteManager:
 
         distance_to_maneuver = self.get_distance_to_next_maneuver()
 
+        MAX_TURN_DESIRE_SPEED = 20.1  # 45 mph in m/s
+        if v_current > MAX_TURN_DESIRE_SPEED:
+            # Block turn desires at highway speeds
+            # (lane change desires will be sent for exits/ramps via should_send_lane_change_desire)
+            if self.last_turn_desire_active:
+                cloudlog.info(f"navd: 🚫 BLOCKED turn desire at {v_current * 2.237:.0f} mph (> 45 mph safety limit)")
+                self.last_turn_desire_active = False
+                self.last_turn_direction = "none"
+            return False, "none"
+
         # Don't send turn desires for straight maneuvers
         if maneuver.direction == "straight" or maneuver.direction == "none":
             return False, "none"
@@ -751,6 +761,60 @@ class RouteManager:
 
             self.last_turn_desire_active = should_send
             self.last_turn_direction = direction
+
+        return should_send, direction
+
+    def should_send_lane_change_desire(self, v_current: float = 0.0) -> Tuple[bool, str]:
+        """
+        Determine if we should send lane change desires for highway exits/ramps at high speed.
+
+        Lane change desires are used instead of turn desires when speed >45 mph to prevent
+        dangerous jerks. These are for the actual exit maneuver, not early positioning.
+
+        Args:
+            v_current: Current vehicle speed in m/s
+
+        Returns:
+            (should_send, direction) tuple where:
+                should_send: True if lane change desires should be sent
+                direction: "left", "right", or "none"
+        """
+        maneuver = self.get_next_maneuver()
+        if maneuver is None:
+            return False, "none"
+
+        distance_to_maneuver = self.get_distance_to_next_maneuver()
+
+        # Only send lane change desires for exits/ramps at highway speeds
+        MAX_TURN_DESIRE_SPEED = 20.1  # 45 mph in m/s
+        if v_current <= MAX_TURN_DESIRE_SPEED:
+            # Below threshold - use turn desires instead
+            return False, "none"
+
+        # Only for exit maneuvers (not regular turns)
+        if maneuver.type != "exit":
+            return False, "none"
+
+        # Don't send for straight maneuvers
+        if maneuver.direction == "straight" or maneuver.direction == "none":
+            return False, "none"
+
+        # Use same distance threshold as turn desires
+        turn_desire_start_distance = self.get_turn_desire_start_distance(maneuver, v_current)
+
+        # Send lane change desires when within threshold distance
+        should_send = False
+        direction = "none"
+
+        if 0 <= distance_to_maneuver <= turn_desire_start_distance:
+            should_send = True
+            direction = maneuver.direction
+
+        # Logging
+        if should_send:
+            cloudlog.info(f"navd: 🛣️  LANE CHANGE DESIRE ACTIVE - Direction: {direction.upper()} | "
+                         f"Speed: {v_current * 2.237:.0f} mph | Distance: {distance_to_maneuver:.0f}m | "
+                         f"Maneuver: {maneuver.description}")
 
         return should_send, direction
 

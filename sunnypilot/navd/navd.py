@@ -422,6 +422,11 @@ class NavigationDaemon:
             nav_state.shouldSendTurnDesire = should_send
             nav_state.turnDesireDirection = self._map_direction(direction)
 
+            # Lane change desire control (for highway exits/ramps at >45 mph)
+            should_send_lc, lc_direction = self.route_manager.should_send_lane_change_desire(self.v_ego)
+            nav_state.shouldSendLaneChangeDesire = should_send_lc
+            nav_state.laneChangeDesireDirection = self._map_direction(lc_direction)
+
             # Lane positioning guidance (for early lane changes before exits/turns)
             # Pass model_v2 for safety validation (lane counting to prevent oncoming traffic lane changes)
             should_send_lane_pos, lane_pos_direction = self.route_manager.should_send_lane_positioning_desire(
