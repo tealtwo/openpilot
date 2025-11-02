@@ -179,6 +179,52 @@ void LongitudinalPanel::refresh(bool _offroad) {
     dynamicExperimentalControl->refresh();
     SmartCruiseControlVision->refresh();
     SmartCruiseControlMap->refresh();
+    has_icbm = hasIntelligentCruiseButtonManagement(CP_SP);
+
+    if (CP_SP.getIntelligentCruiseButtonManagementAvailable() && !has_longitudinal_control) {
+      intelligentCruiseButtonManagement->setEnabled(offroad);
+      intelligentCruiseButtonManagement->setDescription(icbm_description);
+    } else {
+      params.remove("IntelligentCruiseButtonManagement");
+      intelligentCruiseButtonManagement->setEnabled(false);
+
+      const QString icbm_unavaialble = tr("Intelligent Cruise Button Management is currently unavailable on this platform.");
+
+      QString long_desc = icbm_unavaialble;
+      if (has_longitudinal_control) {
+        if (CP.getAlphaLongitudinalAvailable()) {
+          long_desc = icbm_unavaialble + " " + tr("Disable the sunnypilot Longitudinal Control (alpha) toggle to allow Intelligent Cruise Button Management.");
+        } else {
+          long_desc = icbm_unavaialble + " " + tr("sunnypilot Longitudinal Control is the default longitudinal control for this platform.");
+        }
+      }
+
+      intelligentCruiseButtonManagement->setDescription("<b>" + long_desc + "</b><br><br>" + icbm_description);
+      intelligentCruiseButtonManagement->showDescription();
+    }
+
+    if (has_longitudinal_control || has_icbm) {
+      // enable Custom ACC Increments when long is available and is not PCM cruise
+      customAccIncrement->setEnabled(((has_longitudinal_control && !is_pcm_cruise) || has_icbm) && offroad);
+      dynamicExperimentalControl->setEnabled(has_longitudinal_control);
+      SmartCruiseControlVision->setEnabled(true);
+      SmartCruiseControlMap->setEnabled(true);
+    } else {
+      params.remove("CustomAccIncrementsEnabled");
+      params.remove("DynamicExperimentalControl");
+      params.remove("SmartCruiseControlVision");
+      params.remove("SmartCruiseControlMap");
+      customAccIncrement->setEnabled(false);
+      dynamicExperimentalControl->setEnabled(false);
+      SmartCruiseControlVision->setEnabled(false);
+      SmartCruiseControlMap->setEnabled(false);
+    }
+
+    intelligentCruiseButtonManagement->refresh();
+    customAccIncrement->refresh();
+    dynamicExperimentalControl->refresh();
+    SmartCruiseControlVision->refresh();
+    SmartCruiseControlMap->refresh();
   } else {
     has_longitudinal_control = false;
     is_pcm_cruise = false;
@@ -187,7 +233,7 @@ void LongitudinalPanel::refresh(bool _offroad) {
   }
 
   QString accEnabledDescription = tr("Enable custom Short & Long press increments for cruise speed increase/decrease.");
-  QString accNoLongDescription = tr("This feature can only be used with openpilot longitudinal control enabled.");
+  QString accNoLongDescription = tr("This feature can only be used with sunnypilot longitudinal control enabled.");
   QString accPcmCruiseDisabledDescription = tr("This feature is not supported on this platform due to vehicle limitations.");
   QString onroadOnlyDescription = tr("Start the vehicle to check vehicle compatibility.");
 
