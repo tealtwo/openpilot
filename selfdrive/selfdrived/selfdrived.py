@@ -45,6 +45,7 @@ EventName = log.OnroadEvent.EventName
 ButtonType = car.CarState.ButtonEvent.Type
 SafetyModel = car.CarParams.SafetyModel
 TurnDirection = custom.ModelDataV2SP.TurnDirection
+NavTurnDirection = custom.NavStateSP
 
 IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 
@@ -310,6 +311,25 @@ class SelfdriveD(CruiseHelper):
       self.events_sp.add(custom.OnroadEventSP.EventName.laneTurnLeft)
     elif lane_turn_direction == TurnDirection.turnRight:
       self.events_sp.add(custom.OnroadEventSP.EventName.laneTurnRight)
+
+    # Handle navigation UI events (priority: speed -> lane change -> turn)
+    # Speed target event (lowest priority - always add if active)
+    if self.sm['navStateSP'].navSpeedTargetActive:
+      self.events_sp.add(custom.OnroadEventSP.EventName.navPrepareForTurn)
+
+    # Navigation lane change desires (medium priority - add on top of speed)
+    nav_lc_dir = self.sm['navStateSP'].navLaneChangeDesireDirection
+    if nav_lc_dir == 1:  # NavDirection.left
+      self.events_sp.add(custom.OnroadEventSP.EventName.navLaneChangeLeft)
+    elif nav_lc_dir == 2:  # NavDirection.right
+      self.events_sp.add(custom.OnroadEventSP.EventName.navLaneChangeRight)
+
+    # Navigation turn desires (highest priority - add last, UI will show this)
+    nav_turn_dir = self.sm['navStateSP'].navTurnDesireDirection
+    if nav_turn_dir == 1:  # NavDirection.left
+      self.events_sp.add(custom.OnroadEventSP.EventName.navLaneTurnLeft)
+    elif nav_turn_dir == 2:  # NavDirection.right
+      self.events_sp.add(custom.OnroadEventSP.EventName.navLaneTurnRight)
 
     for i, pandaState in enumerate(self.sm['pandaStates']):
       # All pandas must match the list of safetyConfigs, and if outside this list, must be silent or noOutput

@@ -183,12 +183,53 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.),
   },
 
+  EventNameSP.navLaneTurnLeft: {
+    ET.WARNING: Alert(
+      "Navigation: Turning Left",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.MID, VisualAlert.none, AudibleAlert.none, 1.),
+  },
+
+  EventNameSP.navLaneChangeLeft: {
+    ET.WARNING: Alert(
+      "Navigation: Initiating Left Lane Change",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.MID, VisualAlert.none, AudibleAlert.none, 1.),
+  },
+
   EventNameSP.laneTurnRight: {
     ET.WARNING: Alert(
       "Turning Right",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.),
+  },
+
+  EventNameSP.navLaneTurnRight: {
+    ET.WARNING: Alert(
+      "Navigation: Turning Right",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.MID, VisualAlert.none, AudibleAlert.none, 1.),
+  },
+
+  EventNameSP.navLaneChangeRight: {
+    ET.WARNING: Alert(
+      "Navigation: Initiating Right Lane Change",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.MID, VisualAlert.none, AudibleAlert.none, 1.),
+  },
+
+  EventNameSP.navPrepareForTurn: {
+    ET.WARNING: Alert(
+      "Navigation: Reducing Speed for Turn Ahead",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.
+    )
   },
 
   EventNameSP.speedLimitActive: {

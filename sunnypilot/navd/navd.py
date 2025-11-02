@@ -466,6 +466,32 @@ class NavigationDaemon:
         debug_info.gpsAccuracy = self.lane_debug_info['gps_accuracy']
         debug_info.agreement = self.lane_debug_info['agreement']
 
+        # Navigation-specific UI event fields (for selfdrived to trigger UI alerts)
+        if self.route_manager.active:
+            # Set nav turn desire direction from existing logic
+            should_send_turn, turn_dir = self.route_manager.should_send_turn_desire(self.v_ego)
+            nav_state.navTurnDesireDirection = self._map_nav_direction(turn_dir)
+
+            # Set nav lane change desire direction from existing logic
+            should_send_lc, lc_dir = self.route_manager.should_send_lane_change_desire(self.v_ego)
+            nav_state.navLaneChangeDesireDirection = self._map_nav_direction(lc_dir)
+
+            # Set nav lane positioning direction from existing logic
+            should_send_pos, pos_dir = self.route_manager.should_send_lane_positioning_desire(
+                self.current_lane_position,
+                self.sm['modelV2']
+            )
+            nav_state.navLanePositioningDirection = self._map_nav_direction(pos_dir)
+
+            # Set speed target active status
+            nav_state.navSpeedTargetActive = self.route_manager.get_target_speed(self.v_ego) is not None
+        else:
+            # Clear nav UI fields when navigation is inactive
+            nav_state.navTurnDesireDirection = 0  # NavDirection.none
+            nav_state.navLaneChangeDesireDirection = 0  # NavDirection.none
+            nav_state.navLanePositioningDirection = 0  # NavDirection.none
+            nav_state.navSpeedTargetActive = False
+
         # Send message
         self.pm.send('navStateSP', msg)
 
@@ -492,6 +518,14 @@ class NavigationDaemon:
             "right": custom.ModelDataV2SP.TurnDirection.turnRight,
         }
         return direction_map.get(direction, custom.ModelDataV2SP.TurnDirection.none)
+
+    def _map_nav_direction(self, direction: str) -> int:
+        """Map direction string to NavDirection enum for UI events."""
+        if direction == "left":
+            return 1  # NavDirection.left
+        elif direction == "right":
+            return 2  # NavDirection.right
+        return 0  # NavDirection.none
 
     def step(self) -> None:
         # Update messaging

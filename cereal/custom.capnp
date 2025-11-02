@@ -350,6 +350,11 @@ struct OnroadEventSP @0xda96579883444c35 {
     speedLimitChanged @21;
     speedLimitPending @22;
     e2eChime @23;
+    navLaneTurnLeft @24;
+    navLaneTurnRight @25;
+    navLaneChangeLeft @26;
+    navLaneChangeRight @27;
+    navPrepareForTurn @28;
   }
 }
 
@@ -464,6 +469,12 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
   }
 }
 
+enum NavDirection {
+  none @0;
+  left @1;
+  right @2;
+}
+
 struct NavStateSP @0xcb9fd56c7057593a {
   # Navigation state and guidance information
   active @0 :Bool;                          # Whether navigation is currently active
@@ -506,6 +517,12 @@ struct NavStateSP @0xcb9fd56c7057593a {
 
   # Lane tracking debug info (model vs GPS comparison for testing)
   laneDebugInfo @20 :LaneDebugInfo;
+
+  # Navigation-specific UI event fields (separate from model/desire system)
+  navTurnDesireDirection @24 :NavDirection;           # For "Navigation: Turning Left/Right" UI alerts
+  navLaneChangeDesireDirection @25 :NavDirection;     # For "Navigation: Initiating Lane Change" UI alerts
+  navLanePositioningDirection @26 :NavDirection;      # For future lane positioning UI alerts
+  navSpeedTargetActive @27 :Bool;                     # For "Navigation: Reducing Speed" UI alert
 
   enum ManeuverType {
     none @0;

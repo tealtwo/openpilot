@@ -947,38 +947,38 @@ class RouteManager:
         # Determine multiplier and base distance based on turn severity
         if maneuver.type == "exit":
             # Highway exits need more distance
-            multiplier = 3.0
-            base_distance = 80.0
+            multiplier = 4.5
+            base_distance = 180.0
         elif maneuver.type == "roundabout":
             # Roundabouts need moderate braking distance
-            multiplier = 3.0
-            base_distance = 70.0
+            multiplier = 4.0
+            base_distance = 160.0
         elif maneuver.type == "turn" and maneuver.angle is not None:
             # Use turn angle to determine severity
             abs_angle = abs(maneuver.angle)
             if abs_angle < SHARP_TURN_ANGLE:  # Sharp turn (< 60°)
-                multiplier = 3.5
-                base_distance = 90.0
+                multiplier = 5.0
+                base_distance = 200.0
             elif abs_angle < MODERATE_TURN_ANGLE:  # Moderate turn (60-100°)
-                multiplier = 3.0
-                base_distance = 75.0
+                multiplier = 4.5
+                base_distance = 170.0
             elif abs_angle < GENTLE_TURN_ANGLE:  # Gentle turn (100-140°)
-                multiplier = 2.5
-                base_distance = 60.0
+                multiplier = 4.0
+                base_distance = 140.0
             else:  # Very gentle (> 140°)
-                multiplier = 2.0
-                base_distance = 50.0
+                multiplier = 3.5
+                base_distance = 110.0
         else:
             # Default for other maneuver types
-            multiplier = 2.5
-            base_distance = 65.0
+            multiplier = 4.0
+            base_distance = 150.0
 
         # Calculate influence distance: base + (speed_diff × multiplier)
         influence_distance = base_distance + (speed_diff * multiplier)
 
         # Clamp to reasonable range
-        MIN_INFLUENCE_DISTANCE = 80.0  # Minimum safety distance (increased from 30m)
-        MAX_INFLUENCE_DISTANCE = 200.0  # Maximum to avoid braking too early
+        MIN_INFLUENCE_DISTANCE = 180.0  # Minimum safety distance to ensure adequate braking time
+        MAX_INFLUENCE_DISTANCE = 350.0  # Maximum to allow earlier braking for high-speed approaches
 
         return max(MIN_INFLUENCE_DISTANCE, min(MAX_INFLUENCE_DISTANCE, influence_distance))
 
