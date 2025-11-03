@@ -114,17 +114,17 @@ void HudRendererSP::updateState(const UIState &s) {
       navigationStreet = instruction;
 
       for (const QString &pattern : patterns) {
-        QStringList parts = instruction.split(pattern, Qt::CaseInsensitive);
+        QStringList parts = instruction.split(pattern, QString::KeepEmptyParts, Qt::CaseInsensitive);
         if (parts.size() > 1) {
           navigationStreet = parts[1].trimmed();
-          break; 
+          break;
         }
       }
 
-      int turnDir = nav_state.getNavTurnDesireDirection();
-      if (turnDir == 1) {  // left
+      auto turnDir = nav_state.getNavTurnDesireDirection();
+      if (turnDir == cereal::NavDirection::LEFT) {
         navigationArrowType = "left";
-      } else if (turnDir == 2) {  // right
+      } else if (turnDir == cereal::NavDirection::RIGHT) {
         navigationArrowType = "right";
       } else {
         navigationArrowType = "straight";
