@@ -942,11 +942,10 @@ void HudRendererSP::drawBlinker(QPainter &p, const QRect &surface_rect) {
 }
 
 void HudRendererSP::drawNavigationHUD(QPainter &p, const QRect &surface_rect) {
-  int x = surface_rect.center().x();
-  int y = 50;
+  int cx = 120;  // Left side position
+  int y = 320;   // Below speedometer
   int arrowSize = 176;
   int cy_offset = (navigationArrowType == "left" || navigationArrowType == "right") ? -20 : 0;
-  int cx = x - 100;
   int textY = y + arrowSize/2 + cy_offset;
   int cy = (navigationArrowType == "straight") ? textY + 20 : textY + 60;
   p.save();
