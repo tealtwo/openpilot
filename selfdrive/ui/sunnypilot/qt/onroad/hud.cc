@@ -12,6 +12,8 @@
 
 
 HudRendererSP::HudRendererSP() {
+  navigationValid = false;
+
   plus_arrow_up_img = loadPixmap("../../sunnypilot/selfdrive/assets/img_plus_arrow_up", {90, 90});
   minus_arrow_down_img = loadPixmap("../../sunnypilot/selfdrive/assets/img_minus_arrow_down", {90, 90});
 
@@ -83,6 +85,54 @@ void HudRendererSP::updateState(const UIState &s) {
     }
   }
   speedLimitAheadDistancePrev = speedLimitAheadDistance;
+
+  // Navigation HUD state
+  if (sm.updated("navStateSP")) {
+    const auto nav_state = sm["navStateSP"].getNavStateSP();
+    navigationValid = nav_state.getActive() && nav_state.getNextManeuverValid();
+
+    if (navigationValid && nav_state.getNextManeuverDistance() < 500.0) {
+      float distance = nav_state.getNextManeuverDistance();
+      QString instruction = QString::fromStdString(nav_state.getNextManeuverDescription());
+
+      if (is_metric) {
+        if (distance < 200.0) {
+          navigationDistance = QString::number((int)distance) + " m";
+        } else {
+          navigationDistance = QString::number(distance / 1000.0, 'f', 1) + " km";
+        }
+      } else {
+        float dist_ft = distance * 3.28084f;
+        if (dist_ft < 1320.0) {
+          navigationDistance = QString::number((int)(std::round(dist_ft / 50.0) * 50.0)) + " ft";
+        } else {
+          navigationDistance = QString::number(dist_ft / 5280.0, 'f', 1) + " mi";
+        }
+      }
+
+      QStringList patterns = {" onto ", " on ", " at ", " toward ", " towards ", " to "};
+      navigationStreet = instruction;
+
+      for (const QString &pattern : patterns) {
+        QStringList parts = instruction.split(pattern, Qt::CaseInsensitive);
+        if (parts.size() > 1) {
+          navigationStreet = parts[1].trimmed();
+          break; 
+        }
+      }
+
+      int turnDir = nav_state.getNavTurnDesireDirection();
+      if (turnDir == 1) {  // left
+        navigationArrowType = "left";
+      } else if (turnDir == 2) {  // right
+        navigationArrowType = "right";
+      } else {
+        navigationArrowType = "straight";
+      }
+    } else {
+      navigationValid = false;
+    }
+  }
 
   static int reverse_delay = 0;
   bool reverse_allowed = false;
@@ -284,6 +334,11 @@ void HudRendererSP::draw(QPainter &p, const QRect &surface_rect) {
     // Blinker
     if (showTurnSignals) {
       drawBlinker(p, surface_rect);
+    }
+
+    // Navigation HUD
+    if (navigationValid) {
+      drawNavigationHUD(p, surface_rect);
     }
   }
 
@@ -884,4 +939,86 @@ void HudRendererSP::drawBlinker(QPainter &p, const QRect &surface_rect) {
   }
 
   p.restore();
+}
+
+void HudRendererSP::drawNavigationHUD(QPainter &p, const QRect &surface_rect) {
+  int x = surface_rect.center().x();
+  int y = 50;
+  int arrowSize = 176;
+  int cy_offset = (navigationArrowType == "left" || navigationArrowType == "right") ? -20 : 0;
+  int cx = x - 100;
+  int textY = y + arrowSize/2 + cy_offset;
+  int cy = (navigationArrowType == "straight") ? textY + 20 : textY + 60;
+  p.save();
+  p.setPen(Qt::NoPen);
+  p.setBrush(Qt::white);
+  if (navigationArrowType == "left") {
+    drawLeftArrow(p, cx, cy, arrowSize);
+  } else if (navigationArrowType == "right") {
+    drawRightArrow(p, cx, cy, arrowSize);
+  } else {
+    drawStraightArrow(p, cx, cy, arrowSize);
+  }
+  p.restore();
+  int gap = (navigationArrowType == "left") ? -10 : 20;
+  int textX = cx + arrowSize/2 + gap;
+  if (navigationArrowType == "right") textX += 40;
+  p.setFont(InterFont(80, QFont::Bold));
+  p.setPen(Qt::white);
+  p.drawText(textX, textY, navigationDistance);
+  p.setFont(InterFont(50));
+  int streetY = textY + 60;
+  p.drawText(textX, streetY, navigationStreet);
+}
+void HudRendererSP::drawStraightArrow(QPainter &p, int cx, int cy, int size) {
+  int rectWidth = size * 0.2;
+  int rectHeight = size * 0.6;
+  int rectX = cx - rectWidth / 2;
+  int rectY = cy - rectHeight / 2;
+  p.drawRect(rectX, rectY, rectWidth, rectHeight);
+  int triangleHeight = size * 0.3;
+  int triangleBaseWidth = rectWidth * 3;
+  QPolygon triangle;
+  triangle << QPoint(cx - triangleBaseWidth / 2, rectY)
+           << QPoint(cx + triangleBaseWidth / 2, rectY)
+           << QPoint(cx, rectY - triangleHeight);
+  p.drawPolygon(triangle);
+}
+void HudRendererSP::drawLeftArrow(QPainter &p, int cx, int cy, int size) {
+  int vertHeight = size * 0.6;
+  int vertWidth = size * 0.2;
+  int vertX = cx - vertWidth / 2;
+  int vertY = cy - vertHeight;
+  p.drawRect(vertX, vertY, vertWidth, vertHeight);
+  int horizWidth = size * 0.4;
+  int horizHeight = size * 0.2;
+  int horizX = cx - horizWidth + vertWidth / 2 + 1;
+  int horizY = cy - vertHeight - horizHeight / 2;
+  p.drawRect(horizX, horizY, horizWidth, horizHeight);
+  int triangleWidth = size * 0.4;
+  int triangleHeight = size * 0.4;
+  QPolygon triangle;
+  triangle << QPoint(horizX, horizY + horizHeight / 2 - triangleHeight / 2)
+           << QPoint(horizX, horizY + horizHeight / 2 + triangleHeight / 2)
+           << QPoint(horizX - triangleWidth, horizY + horizHeight / 2);
+  p.drawPolygon(triangle);
+}
+void HudRendererSP::drawRightArrow(QPainter &p, int cx, int cy, int size) {
+  int vertHeight = size * 0.6;
+  int vertWidth = size * 0.2;
+  int vertX = cx - vertWidth / 2;
+  int vertY = cy - vertHeight;
+  p.drawRect(vertX, vertY, vertWidth, vertHeight);
+  int horizWidth = size * 0.4;
+  int horizHeight = size * 0.2;
+  int horizX = cx - vertWidth / 2;
+  int horizY = cy - vertHeight - horizHeight / 2;
+  p.drawRect(horizX, horizY, horizWidth, horizHeight);
+  int triangleWidth = size * 0.4;
+  int triangleHeight = size * 0.4;
+  QPolygon triangle;
+  triangle << QPoint(horizX + horizWidth, horizY + horizHeight / 2 - triangleHeight / 2)
+           << QPoint(horizX + horizWidth, horizY + horizHeight / 2 + triangleHeight / 2)
+           << QPoint(horizX + horizWidth + triangleWidth, horizY + horizHeight / 2);
+  p.drawPolygon(triangle);
 }

@@ -355,6 +355,7 @@ struct OnroadEventSP @0xda96579883444c35 {
     navLaneChangeLeft @26;
     navLaneChangeRight @27;
     navPrepareForTurn @28;
+    navigationBanner @29;
   }
 }
 

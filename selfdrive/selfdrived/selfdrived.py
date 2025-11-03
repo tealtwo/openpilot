@@ -89,7 +89,7 @@ class SelfdriveD(CruiseHelper):
     # TODO: de-couple selfdrived with card/conflate on carState without introducing controls mismatches
     self.car_state_sock = messaging.sub_sock('carState', timeout=20)
 
-    ignore = self.sensor_packets + self.gps_packets + ['alertDebug'] + ['modelDataV2SP']
+    ignore = self.sensor_packets + self.gps_packets + ['alertDebug'] + ['modelDataV2SP'] + ['navStateSP']
     if SIMULATION:
       ignore += ['driverCameraState', 'managerState']
     if REPLAY:
@@ -99,7 +99,7 @@ class SelfdriveD(CruiseHelper):
                                    'carOutput', 'driverMonitoringState', 'longitudinalPlan', 'livePose', 'liveDelay',
                                    'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
                                    'controlsState', 'carControl', 'driverAssistance', 'alertDebug', 'userBookmark', 'audioFeedback',
-                                   'modelDataV2SP', 'longitudinalPlanSP'] + \
+                                   'modelDataV2SP', 'longitudinalPlanSP', 'navStateSP'] + \
                                    self.camera_packets + self.sensor_packets + self.gps_packets,
                                   ignore_alive=ignore, ignore_avg_freq=ignore,
                                   ignore_valid=ignore, frequency=int(1/DT_CTRL))
@@ -163,6 +163,10 @@ class SelfdriveD(CruiseHelper):
 
     self.events_sp = EventsSP()
     self.events_sp_prev = []
+
+    # Navigation post-maneuver tracking
+    self.prev_nav_turn_dir = 0
+    self.nav_maneuver_complete_frame = 0
 
     self.mads = ModularAssistiveDrivingSystem(self)
     self.icbm = IntelligentCruiseButtonManagement(self.CP, self.CP_SP)
@@ -330,6 +334,14 @@ class SelfdriveD(CruiseHelper):
       self.events_sp.add(custom.OnroadEventSP.EventName.navLaneTurnLeft)
     elif nav_turn_dir == 2:  # NavDirection.right
       self.events_sp.add(custom.OnroadEventSP.EventName.navLaneTurnRight)
+
+    maneuver_just_completed = self.prev_nav_turn_dir != 0 and nav_turn_dir == 0
+    if maneuver_just_completed:
+      self.nav_maneuver_complete_frame = self.sm.frame
+    time_since_complete = (self.sm.frame - self.nav_maneuver_complete_frame) * DT_CTRL
+    if 0 < time_since_complete <= 3.5 and self.sm['navStateSP'].active and self.sm['navStateSP'].nextManeuverValid:
+      self.events_sp.add(custom.OnroadEventSP.EventName.navigationBanner)
+    self.prev_nav_turn_dir = nav_turn_dir
 
     for i, pandaState in enumerate(self.sm['pandaStates']):
       # All pandas must match the list of safetyConfigs, and if outside this list, must be silent or noOutput
