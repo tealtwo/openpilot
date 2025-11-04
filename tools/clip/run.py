@@ -132,16 +132,22 @@ def populate_car_params(lr: LogReader):
     key, value = cp.key, cp.value
     try:
       params.put(key, params.cpp2python(key, value))
-    except UnknownKeyName:
-      # forks of openpilot may have other Params keys configured. ignore these
-      logger.warning(f"unknown Params key '{key}', skipping")
+    except (UnknownKeyName, TypeError) as e:
+      # forks of openpilot may have other Params keys configured or have type mismatches. ignore these
+      logger.warning(f"skipping Params key '{key}': {e}")
   logger.debug('persisted CarParams')
 
 
 def validate_env(parser: ArgumentParser):
-  if platform.system() not in ['Linux']:
+  if platform.system() not in ['Linux', 'Darwin']:
     parser.exit(1, f'clip.py: error: {platform.system()} is not a supported operating system\n')
-  for proc in ['Xvfb', 'ffmpeg']:
+
+  is_macos = platform.system() == 'Darwin'
+  required_procs = ['ffmpeg']
+  if not is_macos:
+    required_procs.append('Xvfb')
+
+  for proc in required_procs:
     if shutil.which(proc) is None:
       parser.exit(1, f'clip.py: error: missing {proc} command, is it installed?\n')
   for proc in [REPLAY, UI]:
@@ -195,17 +201,26 @@ def clip(
   duration = end - start
   bit_rate_kbps = int(round(target_mb * 8 * 1024 * 1024 / duration / 1000))
 
+  is_macos = platform.system() == 'Darwin'
+
   # TODO: evaluate creating fn that inspects /tmp/.X11-unix and creates unused display to avoid possibility of collision
   display = f':{randint(99, 999)}'
 
   box_style = 'box=1:boxcolor=black@0.33:boxborderw=7'
-  meta_text = get_meta_text(lr, route)
-  overlays = [
-    # metadata overlay
-    f"drawtext=text='{escape_ffmpeg_text(meta_text)}':fontfile={OPENPILOT_FONT}:fontcolor=white:fontsize=15:{box_style}:x=(w-text_w)/2:y=5.5:enable='between(t,1,5)'",
-    # route time overlay
-    f"drawtext=text='%{{eif\\:floor(({start}+t)/60)\\:d\\:2}}\\:%{{eif\\:mod({start}+t\\,60)\\:d\\:2}}':fontfile={OPENPILOT_FONT}:fontcolor=white:fontsize=24:{box_style}:x=w-text_w-38:y=38"
-  ]
+  try:
+    meta_text = get_meta_text(lr, route)
+    overlays = [
+      # metadata overlay
+      f"drawtext=text='{escape_ffmpeg_text(meta_text)}':fontfile={OPENPILOT_FONT}:fontcolor=white:fontsize=15:{box_style}:x=(w-text_w)/2:y=5.5:enable='between(t,1,5)'",
+      # route time overlay
+      f"drawtext=text='%{{eif\\:floor(({start}+t)/60)\\:d\\:2}}\\:%{{eif\\:mod({start}+t\\,60)\\:d\\:2}}':fontfile={OPENPILOT_FONT}:fontcolor=white:fontsize=24:{box_style}:x=w-text_w-38:y=38"
+    ]
+  except Exception as e:
+    logger.warning(f'failed to get metadata: {e}, skipping metadata overlay')
+    overlays = [
+      # route time overlay only
+      f"drawtext=text='%{{eif\\:floor(({start}+t)/60)\\:d\\:2}}\\:%{{eif\\:mod({start}+t\\,60)\\:d\\:2}}':fontfile={OPENPILOT_FONT}:fontcolor=white:fontsize=24:{box_style}:x=w-text_w-38:y=38"
+    ]
   if title:
     overlays.append(f"drawtext=text='{escape_ffmpeg_text(title)}':fontfile={OPENPILOT_FONT}:fontcolor=white:fontsize=32:{box_style}:x=(w-text_w)/2:y=53")
 
@@ -215,56 +230,129 @@ def clip(
       "fps=60",
     ]
 
-  ffmpeg_cmd = [
-    'ffmpeg', '-y',
-    '-video_size', RESOLUTION,
-    '-framerate', str(FRAMERATE),
-    '-f', 'x11grab',
-    '-rtbufsize', '100M',
-    '-draw_mouse', '0',
-    '-i', display,
-    '-c:v', 'libx264',
-    '-maxrate', f'{bit_rate_kbps}k',
-    '-bufsize', f'{bit_rate_kbps*2}k',
-    '-crf', '23',
-    '-filter:v', ','.join(overlays),
-    '-preset', 'ultrafast',
-    '-tune', 'zerolatency',
-    '-pix_fmt', 'yuv420p',
-    '-movflags', '+faststart',
-    '-f', 'mp4',
-    '-t', str(duration),
-    out,
-  ]
+  if is_macos:
+    # macOS: Use AVFoundation to capture screen
+    # Note: User may need to grant screen recording permissions
+    ffmpeg_cmd = [
+      'ffmpeg', '-y',
+      '-f', 'avfoundation',
+      '-capture_cursor', '0',
+      '-framerate', str(FRAMERATE),
+      '-video_size', RESOLUTION,
+      '-i', '1:none',  # Capture display 1 (primary display), no audio
+      '-c:v', 'libx264',
+      '-maxrate', f'{bit_rate_kbps}k',
+      '-bufsize', f'{bit_rate_kbps*2}k',
+      '-crf', '23',
+      '-filter:v', ','.join(overlays),
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-f', 'mp4',
+      '-t', str(duration),
+      out,
+    ]
+  else:
+    # Linux: Use X11 grab
+    ffmpeg_cmd = [
+      'ffmpeg', '-y',
+      '-video_size', RESOLUTION,
+      '-framerate', str(FRAMERATE),
+      '-f', 'x11grab',
+      '-rtbufsize', '100M',
+      '-draw_mouse', '0',
+      '-i', display,
+      '-c:v', 'libx264',
+      '-maxrate', f'{bit_rate_kbps}k',
+      '-bufsize', f'{bit_rate_kbps*2}k',
+      '-crf', '23',
+      '-filter:v', ','.join(overlays),
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      '-f', 'mp4',
+      '-t', str(duration),
+      out,
+    ]
 
-  replay_cmd = [REPLAY, '--ecam', '-c', '1', '-s', str(begin_at), '--prefix', prefix]
+  replay_cmd = [REPLAY, '--ecam', '-c', '1', '-s', str(begin_at)]
+  # On macOS, don't use --prefix as ZMQ backend doesn't support OPENPILOT_PREFIX
+  if not is_macos:
+    replay_cmd.extend(['--prefix', prefix])
   if data_dir:
     replay_cmd.extend(['--data_dir', data_dir])
   if quality == 'low':
     replay_cmd.append('--qcam')
   replay_cmd.append(route.name.canonical_name)
 
-  ui_cmd = [UI, '-platform', 'xcb']
+  if is_macos:
+    # macOS: Use cocoa platform
+    ui_cmd = [UI, '-platform', 'cocoa']
+  else:
+    # Linux: Use xcb platform
+    ui_cmd = [UI, '-platform', 'xcb']
+
   xvfb_cmd = ['Xvfb', display, '-terminate', '-screen', '0', f'{RESOLUTION}x{PIXEL_DEPTH}']
 
-  with OpenpilotPrefix(prefix, shared_download_cache=True):
+  if is_macos:
+    # macOS: ZMQ backend doesn't support OPENPILOT_PREFIX, so we don't use OpenpilotPrefix
+    # Also, we can't run UI and replay together due to socket conflicts, so we only run replay
     populate_car_params(lr)
     env = os.environ.copy()
-    env['DISPLAY'] = display
+    # Set shared download cache
+    env['COMMA_CACHE'] = '/tmp/comma_download_cache'
+    # Add --all flag to replay to output all messages including uiDebug
+    if '--all' not in replay_cmd:
+      replay_cmd.insert(-1, '--all')
 
-    with managed_proc(xvfb_cmd, env) as xvfb_proc, managed_proc(ui_cmd, env) as ui_proc, managed_proc(replay_cmd, env) as replay_proc:
-      procs = [xvfb_proc, ui_proc, replay_proc]
+    logger.warning('macOS support for clip.py is experimental and limited')
+    logger.warning('Running replay without UI due to ZMQ backend limitations')
+
+    # macOS: Run only replay without UI
+    with managed_proc(replay_cmd, env) as replay_proc:
+      procs = [replay_proc]
       logger.info('waiting for replay to begin (loading segments, may take a while)...')
-      wait_for_frames(procs)
-      logger.debug(f'letting UI warm up ({SECONDS_TO_WARM}s)...')
+      # On macOS without UI, we can't use wait_for_frames reliably
+      # Just wait a fixed time for replay to start
+      time.sleep(5)
+      check_for_failure(procs)
+      logger.debug(f'letting replay warm up ({SECONDS_TO_WARM}s)...')
       time.sleep(SECONDS_TO_WARM)
       check_for_failure(procs)
+
+      logger.info('Note: On macOS, clip.py has limited functionality.')
+      logger.info('If you need full functionality, please use a Linux system.')
+      logger.info('Attempting to record, but output may not contain UI overlays.')
+
       with managed_proc(ffmpeg_cmd, env) as ffmpeg_proc:
         procs.append(ffmpeg_proc)
         logger.info(f'recording in progress ({duration}s)...')
+        logger.info('Note: On macOS, you may need to grant screen recording permissions in System Preferences > Privacy & Security')
         ffmpeg_proc.wait(duration + PROC_WAIT_SECONDS)
         check_for_failure(procs)
         logger.info(f'recording complete: {Path(out).resolve()}')
+  else:
+    # Linux: Use OpenpilotPrefix and virtual display
+    with OpenpilotPrefix(prefix, shared_download_cache=True):
+      populate_car_params(lr)
+      env = os.environ.copy()
+      env['DISPLAY'] = display
+
+      with managed_proc(xvfb_cmd, env) as xvfb_proc, managed_proc(ui_cmd, env) as ui_proc, managed_proc(replay_cmd, env) as replay_proc:
+        procs = [xvfb_proc, ui_proc, replay_proc]
+        logger.info('waiting for replay to begin (loading segments, may take a while)...')
+        wait_for_frames(procs)
+        logger.debug(f'letting UI warm up ({SECONDS_TO_WARM}s)...')
+        time.sleep(SECONDS_TO_WARM)
+        check_for_failure(procs)
+        with managed_proc(ffmpeg_cmd, env) as ffmpeg_proc:
+          procs.append(ffmpeg_proc)
+          logger.info(f'recording in progress ({duration}s)...')
+          ffmpeg_proc.wait(duration + PROC_WAIT_SECONDS)
+          check_for_failure(procs)
+          logger.info(f'recording complete: {Path(out).resolve()}')
 
 
 def main():
