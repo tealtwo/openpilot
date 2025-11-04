@@ -47,7 +47,7 @@ void AnnotatedCameraWidgetSP::paintGL() {
 
 void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const QRect &rect, bool nav_active) {
   // btn_size is defined globally in buttons.h
-  const int arrow_size = 80;   // Larger arrow indicator
+  const int arrow_size = 100;  // Larger arrow indicator
   const int x_gap = 20;        // Gap between arrow and button
 
   // Position: to the LEFT of experimental button, vertically centered with it
@@ -56,14 +56,24 @@ void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const
   int arrow_x = rect.width() - UI_BORDER_SIZE - btn_size - x_gap - arrow_size / 2;
   int arrow_y = UI_BORDER_SIZE + btn_size / 2;  // Vertically centered with button center
 
-  // Draw arrow pointing up-right (pointing toward destination)
+  // Draw navigation arrow shape with inward notch at bottom (like location marker)
   QPolygon arrow_shape;
-  int half_size = arrow_size / 2;
 
-  // Triangle pointing up
-  arrow_shape << QPoint(arrow_x, arrow_y + half_size / 2)           // Bottom left
-               << QPoint(arrow_x + half_size, arrow_y + half_size / 2)  // Bottom right
-               << QPoint(arrow_x + half_size / 2, arrow_y - half_size);  // Top center
+  int cx = arrow_x;  // Center X
+  int tip_y = arrow_y - arrow_size / 2;      // Top tip
+  int bottom_y = arrow_y + arrow_size / 2;   // Bottom edge
+  int notch_depth = arrow_size * 0.25;       // How deep the notch cuts in
+  int notch_y = bottom_y - notch_depth;      // Notch point height
+
+  int half_width = arrow_size * 0.4;         // Half width at widest point
+
+  // Navigation arrow with inward V-notch at bottom (6 points, clockwise from tip)
+  arrow_shape << QPoint(cx, tip_y)                          // Tip (top center)
+               << QPoint(cx + half_width, bottom_y)         // Bottom right corner
+               << QPoint(cx + half_width * 0.4, notch_y)    // Right side of notch
+               << QPoint(cx, notch_y + notch_depth * 0.3)   // Center of notch (slight inward)
+               << QPoint(cx - half_width * 0.4, notch_y)    // Left side of notch
+               << QPoint(cx - half_width, bottom_y);        // Bottom left corner
 
   painter.save();
 
@@ -74,7 +84,7 @@ void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const
     painter.drawPolygon(arrow_shape);
   } else {
     // Gray outline only when inactive
-    painter.setPen(QPen(QColor(128, 128, 128, 150), 3));
+    painter.setPen(QPen(QColor(128, 128, 128, 150), 4));
     painter.setBrush(Qt::NoBrush);
     painter.drawPolygon(arrow_shape);
   }
