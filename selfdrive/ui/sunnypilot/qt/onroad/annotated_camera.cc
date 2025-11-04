@@ -62,6 +62,7 @@ void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const
   int cx = arrow_x;  // Center X
   int tip_y = arrow_y - arrow_size / 2;      // Top tip
   int bottom_y = arrow_y + arrow_size / 2;   // Bottom edge
+  int notch_depth = arrow_size * 0.35;       // How deep the V-notch cuts in
   int notch_center_y = arrow_y + arrow_size * 0.15;  // Center of V-notch (cuts upward into arrow)
 
   int half_width = arrow_size * 0.4;         // Half width at widest point
