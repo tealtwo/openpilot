@@ -56,23 +56,25 @@ void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const
   int arrow_x = rect.width() - UI_BORDER_SIZE - btn_size - x_gap - arrow_size / 2;
   int arrow_y = UI_BORDER_SIZE + btn_size / 2;  // Vertically centered with button center
 
-  // Draw navigation arrow shape with clean V-notch at bottom
+  // Draw navigation arrow shape with V-notch indenting upward
   QPolygon arrow_shape;
 
   int cx = arrow_x;  // Center X
   int tip_y = arrow_y - arrow_size / 2;      // Top tip
   int bottom_y = arrow_y + arrow_size / 2;   // Bottom edge
-  int notch_center_y = arrow_y + arrow_size * 0.15;  // Center of V-notch (cuts upward into arrow)
+  int notch_depth = arrow_size * 0.3;        // How deep notch cuts UP into arrow
+  int notch_y = bottom_y - notch_depth;      // Notch point Y (UP from bottom)
 
   int half_width = arrow_size * 0.4;         // Half width at widest point
+  int notch_width = half_width * 0.35;       // Width where notch starts
 
-  // Navigation arrow with V-notch indenting upward into arrow body (5 points)
-  arrow_shape << QPoint(cx, tip_y)                          // Tip (top center)
-               << QPoint(cx + half_width, bottom_y)         // Bottom right corner
-               << QPoint(cx + half_width * 0.3, bottom_y)   // Right edge at bottom
-               << QPoint(cx, notch_center_y)                // Center of V-notch (indents UP into arrow)
-               << QPoint(cx - half_width * 0.3, bottom_y)   // Left edge at bottom
-               << QPoint(cx - half_width, bottom_y);        // Bottom left corner
+  // Navigation arrow with V-notch cutting upward (6 points, clockwise from tip)
+  arrow_shape << QPoint(cx, tip_y)                     // 1. Tip (top center)
+               << QPoint(cx + half_width, bottom_y)    // 2. Bottom right outer corner
+               << QPoint(cx + notch_width, bottom_y)   // 3. Right side where notch starts
+               << QPoint(cx, notch_y)                  // 4. Notch center (cuts UP)
+               << QPoint(cx - notch_width, bottom_y)   // 5. Left side where notch starts
+               << QPoint(cx - half_width, bottom_y);   // 6. Bottom left outer corner
 
   painter.save();
 
