@@ -53,8 +53,9 @@ void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const
   const int x_gap = 20;        // Gap between arrow and button
 
   // Position: to the LEFT of experimental button, vertically centered with it
-  // Account for UI_BORDER_SIZE margin at top where button is positioned
-  int arrow_x = rect.width() - btn_size - x_gap - arrow_size / 2;
+  // Button is positioned at: rect.width() - UI_BORDER_SIZE - btn_size (left edge)
+  // Arrow should be: button_left_edge - x_gap - arrow_size/2
+  int arrow_x = rect.width() - UI_BORDER_SIZE - btn_size - x_gap - arrow_size / 2;
   int arrow_y = UI_BORDER_SIZE + btn_size / 2;  // Vertically centered with button center
 
   // Draw arrow pointing up-right (pointing toward destination)
