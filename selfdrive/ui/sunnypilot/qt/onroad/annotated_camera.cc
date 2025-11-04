@@ -49,13 +49,12 @@ void AnnotatedCameraWidgetSP::paintGL() {
 
 void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const QRect &rect, bool nav_active) {
   // btn_size is defined globally in buttons.h
-  const int arrow_size = 40;  // Small arrow indicator
-  const int x_offset = 10;    // Gap from button
-  const int y_offset = 10;    // Gap below button
+  const int arrow_size = 60;  // Larger arrow indicator
+  const int x_gap = 15;       // Gap between arrow and button
 
-  // Position: below and slightly left of experimental button
-  int arrow_x = rect.width() - btn_size - x_offset - arrow_size / 2;
-  int arrow_y = btn_size + y_offset + arrow_size / 2;
+  // Position: to the LEFT of experimental button, vertically centered with it
+  int arrow_x = rect.width() - btn_size - x_gap - arrow_size / 2;
+  int arrow_y = btn_size / 2;  // Vertically centered with button
 
   // Draw arrow pointing up-right (pointing toward destination)
   QPolygon arrow_shape;
