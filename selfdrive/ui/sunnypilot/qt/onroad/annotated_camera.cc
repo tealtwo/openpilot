@@ -62,17 +62,17 @@ void AnnotatedCameraWidgetSP::drawNavigationStatusArrow(QPainter &painter, const
   int cx = arrow_x;  // Center X
   int tip_y = arrow_y - arrow_size / 2;      // Top tip
   int bottom_y = arrow_y + arrow_size / 2;   // Bottom edge
-  int notch_depth = arrow_size * 0.25;       // How deep the V-notch cuts in
-  int notch_y = bottom_y - notch_depth;      // Notch point height
+  int notch_depth = arrow_size * 0.35;       // How deep the V-notch cuts in
+  int notch_center_y = arrow_y + arrow_size * 0.15;  // Center of V-notch (cuts upward into arrow)
 
   int half_width = arrow_size * 0.4;         // Half width at widest point
 
-  // Navigation arrow with clean V-notch at bottom (5 points)
+  // Navigation arrow with V-notch indenting upward into arrow body (5 points)
   arrow_shape << QPoint(cx, tip_y)                          // Tip (top center)
                << QPoint(cx + half_width, bottom_y)         // Bottom right corner
-               << QPoint(cx + half_width * 0.4, notch_y)    // Right side of V-notch
-               << QPoint(cx, notch_y)                       // Center of V-notch (clean point going UP)
-               << QPoint(cx - half_width * 0.4, notch_y)    // Left side of V-notch
+               << QPoint(cx + half_width * 0.3, bottom_y)   // Right edge at bottom
+               << QPoint(cx, notch_center_y)                // Center of V-notch (indents UP into arrow)
+               << QPoint(cx - half_width * 0.3, bottom_y)   // Left edge at bottom
                << QPoint(cx - half_width, bottom_y);        // Bottom left corner
 
   painter.save();
