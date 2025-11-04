@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clip Server</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { margin-bottom: 30px; color: #fff; }
+        .card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+        .btn {
+            padding: 10px 20px;
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .btn:hover { background: #357abd; }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .job {
+            background: #1a1a1a;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #3a3a3a;
+        }
+        .job.queued { border-color: #f39c12; }
+        .job.running { border-color: #3498db; }
+        .job.completed { border-color: #2ecc71; }
+        .job.failed { border-color: #e74c3c; }
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .job-title {
+            font-weight: 600;
+            color: #fff;
+        }
+        .job-status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-queued { background: #f39c12; color: #1a1a1a; }
+        .status-running { background: #3498db; color: white; }
+        .status-completed { background: #2ecc71; color: white; }
+        .status-failed { background: #e74c3c; color: white; }
+        .job-details {
+            font-size: 13px;
+            color: #b0b0b0;
+            margin-bottom: 10px;
+        }
+        .job-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .error {
+            background: #3a1a1a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #ff6b6b;
+        }
+        .rebuild-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .no-jobs {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Clip Server</h1>
+
+        <div class="card">
+            <h2>Submit New Clip Job</h2>
+            <form id="clipForm">
+                <div class="form-group">
+                    <label>Route (e.g., 0f53129ed44f6920/00000265--ed37b264ba)</label>
+                    <input type="text" id="route" required placeholder="0f53129ed44f6920/00000265--ed37b264ba">
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label>Start Time (seconds)</label>
+                        <input type="number" id="start" required placeholder="1320">
+                    </div>
+                    <div class="form-group">
+                        <label>End Time (seconds)</label>
+                        <input type="number" id="end" required placeholder="1440">
+                    </div>
+                </div>
+                <div class="grid">
+                    <div class="form-group">
+                        <label>Quality</label>
+                        <select id="quality">
+                            <option value="high">High (hevc)</option>
+                            <option value="low">Low (qcam)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Target File Size (MB)</label>
+                        <input type="number" id="filesize" value="50" min="1" max="500">
+                    </div>
+                </div>
+                <button type="submit" class="btn">Start Clip Job</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="rebuild-section">
+                <div>
+                    <h2>Update & Rebuild</h2>
+                    <p style="color: #888; font-size: 14px; margin-top: 5px;">Pull latest changes and rebuild openpilot</p>
+                </div>
+                <button onclick="rebuild()" class="btn">Git Pull & Rebuild</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Jobs</h2>
+            <div id="jobsList"></div>
+        </div>
+    </div>
+
+    <script>
+        let refreshInterval;
+
+        // Submit form
+        document.getElementById('clipForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                route: document.getElementById('route').value,
+                start: parseInt(document.getElementById('start').value),
+                end: parseInt(document.getElementById('end').value),
+                quality: document.getElementById('quality').value,
+                filesize: parseInt(document.getElementById('filesize').value)
+            };
+
+            try {
+                const response = await fetch('/api/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert('Job submitted successfully!');
+                    loadJobs();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error submitting job: ' + error.message);
+            }
+        });
+
+        // Load jobs
+        async function loadJobs() {
+            try {
+                const response = await fetch('/api/jobs');
+                const jobs = await response.json();
+
+                const jobsList = document.getElementById('jobsList');
+
+                if (Object.keys(jobs).length === 0) {
+                    jobsList.innerHTML = '<div class="no-jobs">No jobs yet. Submit one above!</div>';
+                    return;
+                }
+
+                const jobsArray = Object.values(jobs).sort((a, b) =>
+                    new Date(b.created_at) - new Date(a.created_at)
+                );
+
+                jobsList.innerHTML = jobsArray.map(job => `
+                    <div class="job ${job.status}">
+                        <div class="job-header">
+                            <div class="job-title">${job.route}</div>
+                            <span class="job-status status-${job.status}">${job.status.toUpperCase()}</span>
+                        </div>
+                        <div class="job-details">
+                            Time: ${job.start}s - ${job.end}s (${job.end - job.start}s clip) |
+                            Quality: ${job.quality} |
+                            Target: ${job.filesize}MB
+                            <br>
+                            Created: ${new Date(job.created_at).toLocaleString()}
+                            ${job.completed_at ? `<br>Completed: ${new Date(job.completed_at).toLocaleString()}` : ''}
+                            ${job.file_size ? `<br>File Size: ${(job.file_size / 1024 / 1024).toFixed(2)} MB` : ''}
+                        </div>
+                        ${job.error ? `<div class="error">Error: ${job.error}</div>` : ''}
+                        <div class="job-actions">
+                            ${job.status === 'completed' ?
+                                `<button class="btn btn-small" onclick="downloadJob('${job.id}')">Download</button>` :
+                                ''}
+                            <button class="btn btn-danger btn-small" onclick="deleteJob('${job.id}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading jobs:', error);
+            }
+        }
+
+        // Download job
+        function downloadJob(jobId) {
+            window.location.href = `/api/download/${jobId}`;
+        }
+
+        // Delete job
+        async function deleteJob(jobId) {
+            if (!confirm('Delete this job?')) return;
+
+            try {
+                const response = await fetch(`/api/delete/${jobId}`, { method: 'DELETE' });
+                if (response.ok) {
+                    loadJobs();
+                } else {
+                    alert('Error deleting job');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Rebuild
+        async function rebuild() {
+            if (!confirm('This will git pull and rebuild openpilot. Continue?')) return;
+
+            try {
+                const response = await fetch('/api/rebuild', { method: 'POST' });
+                const result = await response.json();
+                alert(result.message + '\nCheck console for progress.');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Auto-refresh jobs every 5 seconds
+        function startAutoRefresh() {
+            loadJobs();
+            refreshInterval = setInterval(loadJobs, 5000);
+        }
+
+        // Start on load
+        startAutoRefresh();
+    </script>
+</body>
+</html>
