@@ -36,11 +36,9 @@ void AnnotatedCameraWidgetSP::paintGL() {
   UIState *s = uiState();
   SubMaster &sm = *(s->sm);
 
-  bool nav_active = false;
-  if (sm.updated("navStateSP") || sm.valid("navStateSP")) {
-    const auto nav_state = sm["navStateSP"].getNavStateSP();
-    nav_active = nav_state.getActive();
-  }
+  // Read current navigation state (don't check updated, just read current value)
+  const auto nav_state = sm["navStateSP"].getNavStateSP();
+  bool nav_active = nav_state.getActive();
 
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
