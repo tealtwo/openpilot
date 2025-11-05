@@ -5,12 +5,16 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
+import json
 import time
+from pathlib import Path
+from typing import List, Optional
 
 import requests
 from requests.exceptions import (SSLError, RequestException, HTTPError)
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.basedir import BASEDIR
 from sunnypilot.models.helpers import is_bundle_version_compatible
 
 from cereal import custom
@@ -22,7 +26,8 @@ class ModelParser:
   @staticmethod
   def _parse_download_uri(download_uri_data) -> custom.ModelManagerSP.DownloadUri:
     download_uri = custom.ModelManagerSP.DownloadUri()
-    download_uri.uri = download_uri_data.get("url")
+    # Handle both remote format ("url") and local format ("uri")
+    download_uri.uri = download_uri_data.get("url") or download_uri_data.get("uri")
     download_uri.sha256 = download_uri_data.get("sha256")
     return download_uri
 
@@ -44,7 +49,7 @@ class ModelParser:
     return model
 
   @staticmethod
-  def _parse_overrides(overrides_data: dict[str, str]) -> list[custom.ModelManagerSP.Override]:
+  def _parse_overrides(overrides_data: dict[str, str]) -> List[custom.ModelManagerSP.Override]:
     overrides = []
     for key, value in overrides_data.items():
       override = custom.ModelManagerSP.Override()
@@ -72,7 +77,7 @@ class ModelParser:
     return model_bundle
 
   @staticmethod
-  def parse_models(json_data: dict) -> list[custom.ModelManagerSP.ModelBundle]:
+  def parse_models(json_data: dict) -> List[custom.ModelManagerSP.ModelBundle]:
     found_bundles = [ModelParser._parse_bundle(bundle) for bundle in json_data.get("bundles", [])]
     return [bundle for bundle in found_bundles if is_bundle_version_compatible(bundle.to_dict())]
 
@@ -117,13 +122,15 @@ class ModelCache:
 class ModelFetcher:
   """Handles fetching and caching of model data from remote source"""
   MODEL_URL = "https://docs.sunnypilot.ai/driving_models_v8.json"
+  LOCAL_MODELS_JSON = Path(BASEDIR) / "sunnypilot" / "models" / "local_models.json"
 
   def __init__(self, params: Params):
     self.params = params
     self.model_cache = ModelCache(params)
     self.model_parser = ModelParser()
+    self._local_bundles_loaded = False
 
-  def _fetch_and_cache_models(self) -> list[custom.ModelManagerSP.ModelBundle] | None:
+  def _fetch_and_cache_models(self) -> Optional[List[custom.ModelManagerSP.ModelBundle]]:
     """Fetches fresh model data from remote and updates cache.
     Returns None on transport errors. Raises on 404 and other fatal HTTP errors.
     """
@@ -154,23 +161,62 @@ class ModelFetcher:
 
     return None
 
-  def get_available_bundles(self) -> list[custom.ModelManagerSP.ModelBundle]:
-    """Gets the list of available models, with smart cache handling"""
+  def _load_local_bundles(self) -> List[custom.ModelManagerSP.ModelBundle]:
+    """
+    Loads bundled local models from local_models.json.
+    Installs bundled model files to device storage on first load.
+    """
+    if not self.LOCAL_MODELS_JSON.exists():
+      cloudlog.debug(f"No local models configuration found at {self.LOCAL_MODELS_JSON}")
+      return []
+
+    try:
+      # Install bundled models to device storage (only copies if missing or hash mismatch)
+      if not self._local_bundles_loaded:
+        cloudlog.info("[ModelFetcher] Installing bundled custom models...")
+        from sunnypilot.models.install_bundled_models import install_bundled_models
+        install_bundled_models()
+        self._local_bundles_loaded = True
+
+      # Load and parse local models JSON
+      with open(self.LOCAL_MODELS_JSON, 'r') as f:
+        local_data = json.load(f)
+
+      local_bundles = self.model_parser.parse_models(local_data)
+      cloudlog.info(f"[ModelFetcher] Loaded {len(local_bundles)} local custom model(s)")
+      return local_bundles
+
+    except Exception as e:
+      cloudlog.exception(f"Error loading local models: {e}")
+      return []
+
+  def get_available_bundles(self) -> List[custom.ModelManagerSP.ModelBundle]:
+    """Gets the list of available models (remote + local bundled), with smart cache handling"""
     cached_data, is_expired = self.model_cache.get()
 
+    # Get remote bundles
+    remote_bundles = []
     if cached_data and not is_expired:
       cloudlog.debug("Using valid cached models data")
-      return self.model_parser.parse_models(cached_data)
+      remote_bundles = self.model_parser.parse_models(cached_data)
+    else:
+      fetched_bundles = self._fetch_and_cache_models()
+      if fetched_bundles is not None:
+        remote_bundles = fetched_bundles
+      elif cached_data:
+        cloudlog.warning("Failed to fetch fresh data. Using expired cache as fallback")
+        remote_bundles = self.model_parser.parse_models(cached_data)
+      else:
+        cloudlog.warning("Failed to fetch fresh data and no cache available")
 
-    fetched_bundles = self._fetch_and_cache_models()
-    if fetched_bundles is not None:
-      return fetched_bundles
+    # Get local bundled models
+    local_bundles = self._load_local_bundles()
 
-    if not cached_data:
-      cloudlog.warning("Failed to fetch fresh data and no cache available")
+    # Merge remote and local bundles
+    all_bundles = remote_bundles + local_bundles
 
-    cloudlog.warning("Failed to fetch fresh data. Using expired cache as fallback")
-    return self.model_parser.parse_models(cached_data)
+    cloudlog.info(f"[ModelFetcher] Total available models: {len(all_bundles)} (remote: {len(remote_bundles)}, local: {len(local_bundles)})")
+    return all_bundles
 
 if __name__ == "__main__":
   params = Params()

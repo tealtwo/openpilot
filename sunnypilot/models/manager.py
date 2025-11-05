@@ -75,9 +75,6 @@ class ModelManagerSP:
 
   async def _process_artifact(self, artifact, destination_path: str) -> None:
     """Processes a single model download including verification"""
-    if not artifact.downloadUri.uri:
-      return None
-
     url = artifact.downloadUri.uri
     expected_hash = artifact.downloadUri.sha256
     filename = artifact.fileName
@@ -90,7 +87,12 @@ class ModelManagerSP:
         artifact.downloadProgress.progress = 100
         artifact.downloadProgress.eta = 0
         self._report_status()
+        cloudlog.info(f"[ModelManager] Using cached/bundled model: {filename}")
         return
+
+      # If no URL provided (bundled model), file must already exist
+      if not url:
+        raise ValueError(f"Bundled model file not found or hash mismatch: {filename}")
 
       # Download and verify
       await self._download_file(url, full_path, artifact)
@@ -102,7 +104,7 @@ class ModelManagerSP:
       self._report_status()
 
     except Exception as e:
-      cloudlog.error(f"Error downloading {filename}: {str(e)}")
+      cloudlog.error(f"Error processing model {filename}: {str(e)}")
       if os.path.exists(full_path):
         os.remove(full_path)
       artifact.downloadProgress.status = custom.ModelManagerSP.DownloadStatus.failed

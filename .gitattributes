@@ -3,6 +3,8 @@
 # to move existing files into LFS:
 # git add --renormalize .
 *.onnx filter=lfs diff=lfs merge=lfs -text
+sunnypilot/models/custom/*.onnx !filter !diff !merge
+sunnypilot/models/custom/*.pkl !filter !diff !merge
 *.svg filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
 *.gif filter=lfs diff=lfs merge=lfs -text
