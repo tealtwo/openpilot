@@ -19,10 +19,10 @@
         {
           "type": "vision",
           "artifact": {
-            "file_name": "indigo_eclipse_vision.onnx",
+            "file_name": "indigo_eclipse_vision_tinygrad.pkl",
             "download_uri": {
               "uri": "",
-              "sha256": "8f16d548ea4eb5d01518a9e90d4527cd97c31a84bcaf6f695dead8f0015fecc4"
+              "sha256": "6a63e4b5081a1abc248a91710c975890b68e069b03f668cf104e81820e077335"
             }
           },
           "metadata": {
@@ -36,10 +36,10 @@
         {
           "type": "policy",
           "artifact": {
-            "file_name": "indigo_eclipse_policy.onnx",
+            "file_name": "indigo_eclipse_policy_tinygrad.pkl",
             "download_uri": {
               "uri": "",
-              "sha256": "6984850bc8e6e1f90197cce8a0882a01c3c7cb0b30c15996064810f0552ab992"
+              "sha256": "8d68438e05f7277e79e1911bd6878675a39b6f88f45dd3251af285cef7ca8dc2"
             }
           },
           "metadata": {
