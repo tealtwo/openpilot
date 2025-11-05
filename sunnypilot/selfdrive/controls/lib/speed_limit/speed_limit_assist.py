@@ -6,7 +6,7 @@ See the LICENSE.md file in the root directory for more details.
 """
 import time
 
-from cereal import custom, car
+from cereal import custom, car, messaging
 from openpilot.common.params import Params
 from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
@@ -43,6 +43,9 @@ V_CRUISE_UNSET = 255.
 CRUISE_BUTTONS_PLUS = (ButtonType.accelCruise, ButtonType.resumeCruise)
 CRUISE_BUTTONS_MINUS = (ButtonType.decelCruise, ButtonType.setCruise)
 CRUISE_BUTTON_CONFIRM_HOLD = 0.5  # secs.
+
+# NAV auto-adjustment constants
+NAV_AUTO_ADJUST_TIMEOUT = 120.0  # secs. Time without manual cruise button press before NAV takes over SLA
 
 
 class SpeedLimitAssist:
@@ -92,6 +95,10 @@ class SpeedLimitAssist:
     self._minus_hold = 0.
     self._last_carstate_ts = 0.
 
+    # NAV auto-adjustment state
+    self.nav_active = False
+    self.last_manual_cruise_button_time = 0.
+
     # TODO-SP: SLA's own output_a_target for planner
     # Solution functions mapped to respective states
     self.acceleration_solutions = {
@@ -119,7 +126,23 @@ class SpeedLimitAssist:
   def v_cruise_cluster_below_confirm_speed_threshold(self) -> bool:
     return bool(self.v_cruise_cluster_conv < CONFIRM_SPEED_THRESHOLD[self.is_metric])
 
+  def is_nav_auto_adjust_active(self) -> bool:
+    """Check if NAV should automatically adjust speed limit without user confirmation"""
+    if not self.nav_active:
+      return False
+
+    if self.last_manual_cruise_button_time == 0:
+      # First time - allow NAV to take control immediately
+      return True
+
+    time_since_manual = time.monotonic() - self.last_manual_cruise_button_time
+    return time_since_manual >= NAV_AUTO_ADJUST_TIMEOUT
+
   def update_active_event(self, events_sp: EventsSP) -> None:
+    # Don't add events if NAV is auto-adjusting (no beeps/prompts)
+    if self.is_nav_auto_adjust_active():
+      return
+
     if self.v_cruise_cluster_below_confirm_speed_threshold:
       events_sp.add(EventNameSP.speedLimitChanged)
     else:
@@ -153,8 +176,17 @@ class SpeedLimitAssist:
       if not b.pressed:
         if b.type in CRUISE_BUTTONS_PLUS:
           self._plus_hold = max(self._plus_hold, now + CRUISE_BUTTON_CONFIRM_HOLD)
+          self.last_manual_cruise_button_time = now  # Track manual adjustment for NAV override
         elif b.type in CRUISE_BUTTONS_MINUS:
           self._minus_hold = max(self._minus_hold, now + CRUISE_BUTTON_CONFIRM_HOLD)
+          self.last_manual_cruise_button_time = now  # Track manual adjustment for NAV override
+
+  def update_nav_state(self, sm: messaging.SubMaster) -> None:
+    """Update navigation active state from navStateSP message"""
+    if 'navStateSP' in sm.valid and sm.valid['navStateSP']:
+      self.nav_active = sm['navStateSP'].active
+    else:
+      self.nav_active = False
 
   def _get_button_release(self, req_plus: bool, req_minus: bool) -> bool:
     now = time.monotonic()
@@ -191,6 +223,10 @@ class SpeedLimitAssist:
 
   @property
   def apply_confirm_speed_threshold(self) -> bool:
+    # NAV auto-adjustment mode: bypass all confirmation requirements
+    if self.is_nav_auto_adjust_active():
+      return False
+
     # below CST: always require user confirmation
     if self.v_cruise_cluster_below_confirm_speed_threshold:
       return True
@@ -264,7 +300,8 @@ class SpeedLimitAssist:
 
         # PENDING
         elif self.state == SpeedLimitAssistState.pending:
-          if self.target_set_speed_confirmed:
+          if self.target_set_speed_confirmed or self.is_nav_auto_adjust_active():
+            # NAV auto-adjust or manual confirmation - transition to active/adapting
             self._update_confirmed_state()
           elif self.speed_limit_changed:
             self.state = SpeedLimitAssistState.preActive
@@ -272,7 +309,8 @@ class SpeedLimitAssist:
 
         # PRE_ACTIVE
         elif self.state == SpeedLimitAssistState.preActive:
-          if self.target_set_speed_confirmed:
+          if self.target_set_speed_confirmed or self.is_nav_auto_adjust_active():
+            # NAV auto-adjust or manual confirmation - transition to active/adapting
             self._update_confirmed_state()
           elif self.pre_active_timer <= 0:
             # Timeout - session ended
@@ -290,7 +328,8 @@ class SpeedLimitAssist:
           self.long_engaged_timer = int(DISABLED_GUARD_PERIOD / DT_MDL)
 
         elif self.long_engaged_timer <= 0:
-          if self.target_set_speed_confirmed:
+          if self.target_set_speed_confirmed or self.is_nav_auto_adjust_active():
+            # NAV auto-adjust or manual confirmation - go directly to active/adapting
             self._update_confirmed_state()
           elif self._has_speed_limit:
             self.state = SpeedLimitAssistState.preActive
