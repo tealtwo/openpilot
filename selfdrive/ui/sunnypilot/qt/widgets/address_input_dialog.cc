@@ -25,7 +25,7 @@ AddressInputDialog::AddressInputDialog(QWidget *parent) : QDialog(parent) {
 
   debounce_timer = new QTimer(this);
   debounce_timer->setSingleShot(true);
-  debounce_timer->setInterval(500);  // 500ms debounce
+  debounce_timer->setInterval(5000);  // 5 second debounce
   connect(debounce_timer, &QTimer::timeout, this, [this]() {
     if (!address_input->text().isEmpty()) {
       geocodeAddress(address_input->text());

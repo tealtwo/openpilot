@@ -62,7 +62,7 @@ SPEED_HIGHWAY_RAMP_SHARP = 20.0      # ~45 mph - sharp curve ramps (<100° angle
 
 # Auto-rerouting thresholds
 OFF_ROUTE_DISTANCE_THRESHOLD = 75.0  # meters - trigger reroute if this far from route
-MIN_REROUTE_INTERVAL = 30.0          # seconds - minimum time between reroute attempts
+MIN_REROUTE_INTERVAL = 25.0          # seconds - minimum time between reroute attempts
 
 # Arrival detection threshold
 ARRIVAL_THRESHOLD = 10.0  # meters - consider arrived when this close to destination
