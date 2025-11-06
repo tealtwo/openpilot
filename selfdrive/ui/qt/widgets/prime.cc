@@ -237,6 +237,7 @@ SetupWidget::SetupWidget(QWidget* parent) : QFrame(parent) {
   WiFiPromptWidget *wifi_prompt = new WiFiPromptWidget;
   QObject::connect(wifi_prompt, &WiFiPromptWidget::openSettings, this, &SetupWidget::openSettings);
   content_layout->addWidget(wifi_prompt);
+  wifi_prompt->hide();  // Hide WiFi widget to show NAV presets instead
 
   NavPresetWidget *nav_preset = new NavPresetWidget;
   content_layout->addWidget(nav_preset);

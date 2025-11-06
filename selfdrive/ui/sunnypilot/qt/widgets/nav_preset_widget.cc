@@ -46,7 +46,6 @@ void NavPresetWidget::setupUI() {
       }
     )");
 
-    // Handle button press with timer for long-press detection
     QTimer *press_timer = new QTimer(this);
     press_timer->setSingleShot(true);
     press_timer->setInterval(500); // 500ms for long press
@@ -57,14 +56,12 @@ void NavPresetWidget::setupUI() {
 
     connect(btn, &QPushButton::released, [this, i, press_timer]() {
       if (press_timer->isActive()) {
-        // Short press - navigate or configure
         press_timer->stop();
         onPresetClicked(i);
       }
     });
 
     connect(press_timer, &QTimer::timeout, [this, i]() {
-      // Long press - configure
       configurePreset(i);
     });
 
@@ -78,6 +75,9 @@ void NavPresetWidget::setupUI() {
       border-radius: 10px;
     }
   )");
+
+  setMinimumHeight(400);
+  setMaximumHeight(700);
 }
 
 void NavPresetWidget::loadPresets() {
