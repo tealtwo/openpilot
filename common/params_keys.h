@@ -273,6 +273,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"NavigationActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"NavigationSpeedControl", {PERSISTENT | BACKUP, BOOL, "1"}},
     {"NavigationPreferences", {PERSISTENT | BACKUP, STRING}},
+    {"NavigationPresets", {PERSISTENT | BACKUP, JSON}},
     {"NavigationRouteAlternatives", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
     {"NavigationRouteSelection", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
     {"NavigationRecalculateRoutes", {CLEAR_ON_MANAGER_START, BOOL}},
