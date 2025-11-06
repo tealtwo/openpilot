@@ -167,6 +167,8 @@ class SelfdriveD(CruiseHelper):
     # Navigation post-maneuver tracking
     self.prev_nav_turn_dir = 0
     self.nav_maneuver_complete_frame = 0
+    self.nav_maneuver_description = ""
+    self.nav_distance_alert_triggered = False
 
     self.mads = ModularAssistiveDrivingSystem(self)
     self.icbm = IntelligentCruiseButtonManagement(self.CP, self.CP_SP)
@@ -334,6 +336,22 @@ class SelfdriveD(CruiseHelper):
       self.events_sp.add(custom.OnroadEventSP.EventName.navLaneTurnLeft)
     elif nav_turn_dir == 2:  # NavDirection.right
       self.events_sp.add(custom.OnroadEventSP.EventName.navLaneTurnRight)
+
+    # Distance-based navigation banner (proactive, before maneuver)
+    if self.sm['navStateSP'].active and self.sm['navStateSP'].nextManeuverValid:
+      nav_distance = self.sm['navStateSP'].nextManeuverDistance
+      nav_description = self.sm['navStateSP'].nextManeuverDescription
+
+      if nav_description != self.nav_maneuver_description:
+        self.nav_maneuver_description = nav_description
+        self.nav_distance_alert_triggered = False
+
+      ONE_MILE = 1609.0
+      ALERT_WINDOW = 100.0
+      if (ONE_MILE - ALERT_WINDOW) <= nav_distance <= (ONE_MILE + ALERT_WINDOW):
+        if not self.nav_distance_alert_triggered:
+          self.events_sp.add(custom.OnroadEventSP.EventName.navigationBanner)
+          self.nav_distance_alert_triggered = True
 
     maneuver_just_completed = self.prev_nav_turn_dir != 0 and nav_turn_dir == 0
     if maneuver_just_completed:
