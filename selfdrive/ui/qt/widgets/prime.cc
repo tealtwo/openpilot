@@ -15,6 +15,7 @@
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/widgets/wifi.h"
+#include "selfdrive/ui/sunnypilot/qt/widgets/nav_preset_widget.h"
 
 using qrcodegen::QrCode;
 
@@ -236,6 +237,9 @@ SetupWidget::SetupWidget(QWidget* parent) : QFrame(parent) {
   WiFiPromptWidget *wifi_prompt = new WiFiPromptWidget;
   QObject::connect(wifi_prompt, &WiFiPromptWidget::openSettings, this, &SetupWidget::openSettings);
   content_layout->addWidget(wifi_prompt);
+
+  NavPresetWidget *nav_preset = new NavPresetWidget;
+  content_layout->addWidget(nav_preset);
   content_layout->addStretch();
 
   mainLayout->addWidget(content);
