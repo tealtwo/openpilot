@@ -30,29 +30,28 @@ void NavPresetWidget::setupUI() {
 
   // Create 3x2 grid of preset buttons
   QGridLayout *grid_layout = new QGridLayout();
-  grid_layout->setHorizontalSpacing(40);
-  grid_layout->setVerticalSpacing(30);
+  grid_layout->setHorizontalSpacing(30);
+  grid_layout->setVerticalSpacing(20);
   grid_layout->setContentsMargins(0, 20, 0, 0);
 
   for (int i = 0; i < PRESET_COUNT; i++) {
     int row = i / 3;
     int col = i % 3;
 
-    // Container for button + label
+    // Container for button + label - fixed size to prevent overlap
     QWidget *preset_container = new QWidget();
-    preset_container->setFixedWidth(200);
+    preset_container->setFixedSize(180, 230);  // Width x Height for button + label
     QVBoxLayout *preset_layout = new QVBoxLayout(preset_container);
-    preset_layout->setSpacing(12);
+    preset_layout->setSpacing(10);
     preset_layout->setContentsMargins(0, 0, 0, 0);
-    preset_layout->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
 
     // Round button
     QPushButton *btn = new QPushButton();
-    btn->setFixedSize(160, 160);
+    btn->setFixedSize(140, 140);
     btn->setStyleSheet(R"(
       QPushButton {
-        font-size: 70px;
-        border-radius: 80px;
+        font-size: 65px;
+        border-radius: 70px;
         background-color: #444444;
         border: none;
       }
@@ -83,16 +82,16 @@ void NavPresetWidget::setupUI() {
     preset_buttons[i] = btn;
     preset_layout->addWidget(btn, 0, Qt::AlignHCenter);
 
-    // Label below button
+    // Label below button - fixed height
     QLabel *label = new QLabel();
-    label->setFixedWidth(200);
-    label->setStyleSheet("font-size: 28px; color: white;");
+    label->setFixedSize(180, 70);  // Give enough space for 2 lines
+    label->setStyleSheet("font-size: 26px; color: white;");
     label->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     label->setWordWrap(true);
     preset_labels[i] = label;
     preset_layout->addWidget(label, 0, Qt::AlignHCenter);
 
-    grid_layout->addWidget(preset_container, row, col);
+    grid_layout->addWidget(preset_container, row, col, Qt::AlignCenter);
   }
 
   main_layout->addLayout(grid_layout);
