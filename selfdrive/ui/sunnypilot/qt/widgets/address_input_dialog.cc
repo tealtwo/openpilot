@@ -39,11 +39,11 @@ void AddressInputDialog::setupUI() {
   setStyleSheet(R"(
     * {
       outline: none;
-      color: #1C1C1E;
+      color: white;
       font-family: Inter;
     }
     AddressInputDialog {
-      background-color: #FDF6E3;
+      background-color: #1C1C1E;
     }
   )");
 
@@ -53,18 +53,19 @@ void AddressInputDialog::setupUI() {
 
   // Title
   title_label = new QLabel(tr("Enter Destination Address"));
-  title_label->setStyleSheet("font-size: 90px; font-weight: bold;");
+  title_label->setStyleSheet("font-size: 90px; font-weight: bold; color: white;");
   main_layout->addWidget(title_label, 0, Qt::AlignTop);
 
   // Address input field
   address_input = new QLineEdit();
   address_input->setStyleSheet(R"(
     QLineEdit {
-      background-color: white;
-      border: 2px solid #CCCCCC;
+      background-color: #2C2C2E;
+      border: 2px solid #48484A;
       border-radius: 10px;
       padding: 25px;
       font-size: 55px;
+      color: white;
     }
     QLineEdit:focus {
       border: 2px solid #465BEA;
@@ -73,26 +74,26 @@ void AddressInputDialog::setupUI() {
   connect(address_input, &QLineEdit::textChanged, this, &AddressInputDialog::onTextChanged);
   main_layout->addWidget(address_input);
 
-  // Results list
+  // Results list - fixed height to prevent keyboard squishing
   results_list = new QListWidget();
   results_list->setStyleSheet(R"(
     QListWidget {
-      background-color: white;
-      border: 2px solid #CCCCCC;
+      background-color: #2C2C2E;
+      border: 2px solid #48484A;
       border-radius: 10px;
       font-size: 40px;
+      color: white;
     }
     QListWidget::item {
       padding: 20px;
-      border-bottom: 1px solid #EEEEEE;
+      border-bottom: 1px solid #48484A;
     }
     QListWidget::item:selected {
       background-color: #465BEA;
       color: white;
     }
   )");
-  results_list->setMinimumHeight(400);
-  results_list->setMaximumHeight(500);
+  results_list->setFixedHeight(450);
   results_list->hide();  // Hidden until results available
   connect(results_list, &QListWidget::itemClicked, this, &AddressInputDialog::onResultSelected);
   main_layout->addWidget(results_list);
@@ -103,14 +104,15 @@ void AddressInputDialog::setupUI() {
   QPushButton *cancel_btn = new QPushButton(tr("Cancel"));
   cancel_btn->setStyleSheet(R"(
     QPushButton {
-      background-color: #CCCCCC;
+      background-color: #48484A;
       border-radius: 10px;
       padding: 30px;
       font-size: 50px;
       font-weight: 500;
+      color: white;
     }
     QPushButton:pressed {
-      background-color: #BBBBBB;
+      background-color: #5A5A5C;
     }
   )");
   connect(cancel_btn, &QPushButton::clicked, this, &AddressInputDialog::handleCancel);
@@ -124,7 +126,7 @@ void AddressInputDialog::setupUI() {
   connect(keyboard, &Keyboard::emitKey, this, [this](const QString &key) {
     address_input->insert(key.left(1));
   });
-  main_layout->addWidget(keyboard, 2, Qt::AlignBottom);
+  main_layout->addWidget(keyboard, 0, Qt::AlignBottom);
 }
 
 bool AddressInputDialog::getAddress(QWidget *parent, QString &outName,
