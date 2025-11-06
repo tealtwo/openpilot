@@ -31,7 +31,7 @@ void NavPresetWidget::setupUI() {
   // Create 3x2 grid of preset buttons
   QGridLayout *grid_layout = new QGridLayout();
   grid_layout->setHorizontalSpacing(30);
-  grid_layout->setVerticalSpacing(20);
+  grid_layout->setVerticalSpacing(50);  // Much more space between rows
   grid_layout->setContentsMargins(0, 20, 0, 0);
 
   for (int i = 0; i < PRESET_COUNT; i++) {
@@ -104,8 +104,8 @@ void NavPresetWidget::setupUI() {
     }
   )");
 
-  setMinimumHeight(400);
-  setMaximumHeight(700);
+  setMinimumHeight(500);
+  setMaximumHeight(800);
 }
 
 void NavPresetWidget::loadPresets() {
