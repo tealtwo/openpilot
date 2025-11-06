@@ -166,7 +166,7 @@ void AddressInputDialog::onTextChanged(const QString &text) {
 }
 
 void AddressInputDialog::geocodeAddress(const QString &query) {
-  QString token = QString::fromStdString(params.get("MAPBOX_TOKEN"));
+  QString token = QString::fromStdString(params.get("MapboxToken"));
   if (token.isEmpty()) {
     results_list->clear();
     results_list->addItem(tr("Error: Mapbox token not configured"));
