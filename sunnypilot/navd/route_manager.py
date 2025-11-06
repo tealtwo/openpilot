@@ -51,7 +51,7 @@ GENTLE_TURN_ANGLE = 140.0   # 100-140 degrees is gentle
 
 # Recommended speeds for turn types (m/s)
 SPEED_SHARP_TURN = 8.0      # ~18 mph
-SPEED_MODERATE_TURN = 12.0  # ~27 mph
+SPEED_MODERATE_TURN = 10.5  # ~27 mph
 SPEED_GENTLE_TURN = 16.0    # ~36 mph
 SPEED_ROUNDABOUT = 10.0     # ~22 mph for roundabouts
 

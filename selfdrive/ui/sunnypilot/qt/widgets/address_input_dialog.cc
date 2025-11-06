@@ -47,17 +47,14 @@ void AddressInputDialog::setupUI() {
     }
   )");
 
-  QWidget *content = new QWidget(this);
-  content->setGeometry(0, 0, width(), height());
-
-  QVBoxLayout *top_layout = new QVBoxLayout(content);
-  top_layout->setContentsMargins(40, 40, 40, 550);  // Leave space for keyboard at bottom
-  top_layout->setSpacing(25);
+  QVBoxLayout *main_layout = new QVBoxLayout(this);
+  main_layout->setContentsMargins(40, 40, 40, 40);
+  main_layout->setSpacing(25);
 
   // Title
   title_label = new QLabel(tr("Enter Destination Address"));
   title_label->setStyleSheet("font-size: 90px; font-weight: bold; color: white;");
-  top_layout->addWidget(title_label);
+  main_layout->addWidget(title_label);
 
   // Address input field
   address_input = new QLineEdit();
@@ -75,7 +72,7 @@ void AddressInputDialog::setupUI() {
     }
   )");
   connect(address_input, &QLineEdit::textChanged, this, &AddressInputDialog::onTextChanged);
-  top_layout->addWidget(address_input);
+  main_layout->addWidget(address_input);
 
   // Results list
   results_list = new QListWidget();
@@ -96,13 +93,14 @@ void AddressInputDialog::setupUI() {
       color: white;
     }
   )");
-  results_list->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+  results_list->setFixedHeight(300);
   results_list->hide();  // Hidden until results available
   connect(results_list, &QListWidget::itemClicked, this, &AddressInputDialog::onResultSelected);
-  top_layout->addWidget(results_list, 1);  // Give it stretch factor
+  main_layout->addWidget(results_list);
 
   // Cancel button
   QPushButton *cancel_btn = new QPushButton(tr("Cancel"));
+  cancel_btn->setFixedHeight(80);
   cancel_btn->setStyleSheet(R"(
     QPushButton {
       background-color: #48484A;
@@ -117,17 +115,17 @@ void AddressInputDialog::setupUI() {
     }
   )");
   connect(cancel_btn, &QPushButton::clicked, this, &AddressInputDialog::handleCancel);
-  top_layout->addWidget(cancel_btn);
+  main_layout->addWidget(cancel_btn);
 
-  // Keyboard at fixed position at bottom
+  // Keyboard
   keyboard = new Keyboard(this);
-  keyboard->setGeometry(0, height() - 500, width(), 500);
   connect(keyboard, &Keyboard::emitBackspace, this, [this]() {
     address_input->backspace();
   });
   connect(keyboard, &Keyboard::emitKey, this, [this](const QString &key) {
     address_input->insert(key.left(1));
   });
+  main_layout->addWidget(keyboard);
 }
 
 bool AddressInputDialog::getAddress(QWidget *parent, QString &outName,
