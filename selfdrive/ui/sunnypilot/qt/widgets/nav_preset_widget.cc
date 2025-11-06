@@ -30,7 +30,8 @@ void NavPresetWidget::setupUI() {
 
   // Create 3x2 grid of preset buttons
   QGridLayout *grid_layout = new QGridLayout();
-  grid_layout->setSpacing(20);
+  grid_layout->setHorizontalSpacing(40);
+  grid_layout->setVerticalSpacing(30);
   grid_layout->setContentsMargins(0, 20, 0, 0);
 
   for (int i = 0; i < PRESET_COUNT; i++) {
@@ -39,16 +40,18 @@ void NavPresetWidget::setupUI() {
 
     // Container for button + label
     QWidget *preset_container = new QWidget();
+    preset_container->setFixedWidth(200);
     QVBoxLayout *preset_layout = new QVBoxLayout(preset_container);
-    preset_layout->setSpacing(8);
+    preset_layout->setSpacing(12);
     preset_layout->setContentsMargins(0, 0, 0, 0);
+    preset_layout->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
 
     // Round button
     QPushButton *btn = new QPushButton();
     btn->setFixedSize(160, 160);
     btn->setStyleSheet(R"(
       QPushButton {
-        font-size: 60px;
+        font-size: 70px;
         border-radius: 80px;
         background-color: #444444;
         border: none;
@@ -82,13 +85,14 @@ void NavPresetWidget::setupUI() {
 
     // Label below button
     QLabel *label = new QLabel();
-    label->setStyleSheet("font-size: 32px; color: white;");
-    label->setAlignment(Qt::AlignCenter);
+    label->setFixedWidth(200);
+    label->setStyleSheet("font-size: 28px; color: white;");
+    label->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     label->setWordWrap(true);
     preset_labels[i] = label;
     preset_layout->addWidget(label, 0, Qt::AlignHCenter);
 
-    grid_layout->addWidget(preset_container, row, col, Qt::AlignCenter);
+    grid_layout->addWidget(preset_container, row, col);
   }
 
   main_layout->addLayout(grid_layout);
