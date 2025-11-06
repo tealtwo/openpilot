@@ -3,6 +3,7 @@
  */
 #include "selfdrive/ui/sunnypilot/qt/widgets/nav_preset_widget.h"
 
+#include <QGridLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -21,25 +22,36 @@ NavPresetWidget::NavPresetWidget(QWidget *parent) : QFrame(parent) {
 void NavPresetWidget::setupUI() {
   QVBoxLayout *main_layout = new QVBoxLayout(this);
   main_layout->setContentsMargins(56, 40, 56, 40);
-  main_layout->setSpacing(12);
+  main_layout->setSpacing(20);
 
   QLabel *title = new QLabel(tr("Navigation Presets"));
   title->setStyleSheet("font-size: 56px; font-weight: 500;");
   main_layout->addWidget(title);
 
-  // Create 6 preset buttons
+  // Create 3x2 grid of preset buttons
+  QGridLayout *grid_layout = new QGridLayout();
+  grid_layout->setSpacing(20);
+  grid_layout->setContentsMargins(0, 20, 0, 0);
+
   for (int i = 0; i < PRESET_COUNT; i++) {
+    int row = i / 3;
+    int col = i % 3;
+
+    // Container for button + label
+    QWidget *preset_container = new QWidget();
+    QVBoxLayout *preset_layout = new QVBoxLayout(preset_container);
+    preset_layout->setSpacing(8);
+    preset_layout->setContentsMargins(0, 0, 0, 0);
+
+    // Round button
     QPushButton *btn = new QPushButton();
-    btn->setMinimumHeight(85);
-    btn->setMaximumHeight(95);
+    btn->setFixedSize(160, 160);
     btn->setStyleSheet(R"(
       QPushButton {
-        font-size: 40px;
-        font-weight: 400;
-        border-radius: 10px;
+        font-size: 60px;
+        border-radius: 80px;
         background-color: #444444;
-        padding: 20px;
-        text-align: left;
+        border: none;
       }
       QPushButton:pressed {
         background-color: #555555;
@@ -66,8 +78,21 @@ void NavPresetWidget::setupUI() {
     });
 
     preset_buttons[i] = btn;
-    main_layout->addWidget(btn);
+    preset_layout->addWidget(btn, 0, Qt::AlignHCenter);
+
+    // Label below button
+    QLabel *label = new QLabel();
+    label->setStyleSheet("font-size: 32px; color: white;");
+    label->setAlignment(Qt::AlignCenter);
+    label->setWordWrap(true);
+    preset_labels[i] = label;
+    preset_layout->addWidget(label, 0, Qt::AlignHCenter);
+
+    grid_layout->addWidget(preset_container, row, col, Qt::AlignCenter);
   }
+
+  main_layout->addLayout(grid_layout);
+  main_layout->addStretch();
 
   setStyleSheet(R"(
     NavPresetWidget {
@@ -131,9 +156,11 @@ void NavPresetWidget::savePresets() {
 void NavPresetWidget::refreshPresets() {
   for (int i = 0; i < PRESET_COUNT; i++) {
     if (presets[i].configured) {
-      preset_buttons[i]->setText(QString("📍 %1  →").arg(presets[i].name));
+      preset_buttons[i]->setText("📍");
+      preset_labels[i]->setText(presets[i].name);
     } else {
-      preset_buttons[i]->setText("➕ Tap to configure");
+      preset_buttons[i]->setText("➕");
+      preset_labels[i]->setText("Tap to\nconfigure");
     }
   }
 }

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QFrame>
+#include <QLabel>
 #include <QPushButton>
 #include <QWidget>
 #include <array>
@@ -35,6 +36,7 @@ private:
   Params params;
   std::array<Preset, PRESET_COUNT> presets;
   std::array<QPushButton*, PRESET_COUNT> preset_buttons;
+  std::array<QLabel*, PRESET_COUNT> preset_labels;
 
   void loadPresets();
   void savePresets();
