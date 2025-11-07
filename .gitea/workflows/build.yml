@@ -1,0 +1,77 @@
+name: Build and Compile openpilot
+
+on:
+  push:
+    branches:
+      - master-navd
+  pull_request:
+    branches:
+      - master-navd
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          clang \
+          cmake \
+          python3-dev \
+          python3-venv \
+          libcapnp-dev \
+          capnproto \
+          libzmq5-dev \
+          libusb-1.0-0-dev
+
+    - name: Run openpilot setup script
+      run: |
+        cd tools
+        ./op.sh setup
+
+    - name: Activate virtual environment
+      run: |
+        source .venv/bin/activate
+        echo "PATH=$VIRTUAL_ENV/bin:$PATH" >> $GITHUB_ENV
+        echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> $GITHUB_ENV
+
+    - name: Build openpilot with full logging
+      run: |
+        source .venv/bin/activate
+        echo "================================"
+        echo "Starting openpilot build..."
+        echo "================================"
+        scons -j$(nproc) 2>&1 | tee build.log
+        BUILD_EXIT_CODE=${PIPESTATUS[0]}
+        echo "================================"
+        echo "Build exit code: $BUILD_EXIT_CODE"
+        echo "================================"
+        if [ $BUILD_EXIT_CODE -ne 0 ]; then
+          echo "❌ Build FAILED! Check logs above for errors."
+          cat build.log
+          exit 1
+        else
+          echo "✅ Build completed successfully!"
+        fi
+
+    - name: Upload build log on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-log
+        path: build.log
+        retention-days: 7
